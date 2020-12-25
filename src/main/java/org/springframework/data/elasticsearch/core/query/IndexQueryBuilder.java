@@ -23,6 +23,8 @@ import org.springframework.lang.Nullable;
  * @author Rizwan Idrees
  * @author Mohsin Husen
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
+ * @author Subhobrata Dey
  */
 public class IndexQueryBuilder {
 
@@ -30,7 +32,11 @@ public class IndexQueryBuilder {
 	@Nullable private Object object;
 	@Nullable private Long version;
 	@Nullable private String source;
-	@Nullable private String parentId;
+	@Deprecated @Nullable private String parentId;
+	@Nullable private Long seqNo;
+	@Nullable private Long primaryTerm;
+	@Nullable private String routing;
+	@Nullable private IndexQuery.OpType opType;
 
 	public IndexQueryBuilder withId(String id) {
 		this.id = id;
@@ -52,8 +58,28 @@ public class IndexQueryBuilder {
 		return this;
 	}
 
+	@Deprecated
 	public IndexQueryBuilder withParentId(String parentId) {
 		this.parentId = parentId;
+		return this;
+	}
+
+	public IndexQueryBuilder withSeqNoPrimaryTerm(SeqNoPrimaryTerm seqNoPrimaryTerm) {
+		this.seqNo = seqNoPrimaryTerm.getSequenceNumber();
+		this.primaryTerm = seqNoPrimaryTerm.getPrimaryTerm();
+		return this;
+	}
+
+	public IndexQueryBuilder withRouting(@Nullable String routing) {
+		this.routing = routing;
+		return this;
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	public IndexQueryBuilder withOpType(IndexQuery.OpType opType) {
+		this.opType = opType;
 		return this;
 	}
 
@@ -64,6 +90,10 @@ public class IndexQueryBuilder {
 		indexQuery.setParentId(parentId);
 		indexQuery.setSource(source);
 		indexQuery.setVersion(version);
+		indexQuery.setSeqNo(seqNo);
+		indexQuery.setPrimaryTerm(primaryTerm);
+		indexQuery.setRouting(routing);
+		indexQuery.setOpType(opType);
 		return indexQuery;
 	}
 }

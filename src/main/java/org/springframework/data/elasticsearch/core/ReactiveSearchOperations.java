@@ -19,6 +19,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.aggregations.Aggregation;
+import org.elasticsearch.search.suggest.Suggest;
+import org.elasticsearch.search.suggest.SuggestBuilder;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Query;
@@ -30,6 +33,8 @@ import org.springframework.data.elasticsearch.core.query.StringQuery;
  * APIs</a>.
  *
  * @author Peter-Josef Meisch
+ * @author Russell Parry
+ * @author Thomas Geese
  * @since 4.0
  */
 public interface ReactiveSearchOperations {
@@ -131,20 +136,6 @@ public interface ReactiveSearchOperations {
 
 	/**
 	 * Search the index for entities matching the given {@link Query query}. <br />
-	 * {@link Pageable#isUnpaged() Unpaged} queries may overrule elasticsearch server defaults for page size by either *
-	 * delegating to the scroll API or using a max {@link org.elasticsearch.search.builder.SearchSourceBuilder#size(int) *
-	 * size}.
-	 *
-	 * @param query must not be {@literal null}.
-	 * @param entityType The entity type for mapping the query. Must not be {@literal null}.
-	 * @param returnType The mapping target type. Must not be {@literal null}. Th
-	 * @param <T>
-	 * @return a {@link Flux} emitting matching entities one by one wrapped in a {@link SearchHit}.
-	 */
-	<T> Flux<SearchHit<T>> search(Query query, Class<?> entityType, Class<T> returnType);
-
-	/**
-	 * Search the index for entities matching the given {@link Query query}. <br />
 	 * {@link Pageable#isUnpaged() Unpaged} queries may overrule elasticsearch server defaults for page size by either
 	 * delegating to the scroll API or using a max {@link org.elasticsearch.search.builder.SearchSourceBuilder#size(int)
 	 * size}.
@@ -159,17 +150,18 @@ public interface ReactiveSearchOperations {
 	}
 
 	/**
-	 * Search the index for entities matching the given {@link Query query}.
+	 * Search the index for entities matching the given {@link Query query}. <br />
+	 * {@link Pageable#isUnpaged() Unpaged} queries may overrule elasticsearch server defaults for page size by either *
+	 * delegating to the scroll API or using a max {@link org.elasticsearch.search.builder.SearchSourceBuilder#size(int) *
+	 * size}.
 	 *
-	 * @param <T>
 	 * @param query must not be {@literal null}.
-	 * @param entityType must not be {@literal null}.
-	 * @param resultType the projection result type.
-	 * @param index the target index, must not be {@literal null}
+	 * @param entityType The entity type for mapping the query. Must not be {@literal null}.
+	 * @param returnType The mapping target type. Must not be {@literal null}. Th
 	 * @param <T>
 	 * @return a {@link Flux} emitting matching entities one by one wrapped in a {@link SearchHit}.
 	 */
-	<T> Flux<SearchHit<T>> search(Query query, Class<?> entityType, Class<T> resultType, IndexCoordinates index);
+	<T> Flux<SearchHit<T>> search(Query query, Class<?> entityType, Class<T> returnType);
 
 	/**
 	 * Search the index for entities matching the given {@link Query query}.
@@ -183,4 +175,111 @@ public interface ReactiveSearchOperations {
 	default <T> Flux<SearchHit<T>> search(Query query, Class<T> entityType, IndexCoordinates index) {
 		return search(query, entityType, entityType, index);
 	}
+
+	/**
+	 * Search the index for entities matching the given {@link Query query}.
+	 *
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @param resultType the projection result type.
+	 * @param index the target index, must not be {@literal null}
+	 * @param <T>
+	 * @return a {@link Flux} emitting matching entities one by one wrapped in a {@link SearchHit}.
+	 */
+	<T> Flux<SearchHit<T>> search(Query query, Class<?> entityType, Class<T> resultType, IndexCoordinates index);
+
+	/**
+	 * Search the index for entities matching the given {@link Query query}.
+	 *
+	 * @param <T>
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @param <T>
+	 * @return a {@link Mono} emitting matching entities in a {@link SearchHits}.
+	 * @since 4.1
+	 */
+	default <T> Mono<SearchPage<T>> searchForPage(Query query, Class<T> entityType) {
+		return searchForPage(query, entityType, entityType);
+	}
+
+	/**
+	 * Search the index for entities matching the given {@link Query query}.
+	 *
+	 * @param <T>
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @param resultType the projection result type.
+	 * @param <T>
+	 * @return a {@link Mono} emitting matching entities in a {@link SearchHits}.
+	 * @since 4.1
+	 */
+	<T> Mono<SearchPage<T>> searchForPage(Query query, Class<?> entityType, Class<T> resultType);
+
+	/**
+	 * Search the index for entities matching the given {@link Query query}.
+	 *
+	 * @param <T>
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @param index the target index, must not be {@literal null}
+	 * @param <T>
+	 * @return a {@link Mono} emitting matching entities in a {@link SearchHits}.
+	 * @since 4.1
+	 */
+	default <T> Mono<SearchPage<T>> searchForPage(Query query, Class<T> entityType, IndexCoordinates index) {
+		return searchForPage(query, entityType, entityType, index);
+	}
+
+	/**
+	 * Search the index for entities matching the given {@link Query query}.
+	 *
+	 * @param <T>
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @param resultType the projection result type.
+	 * @param index the target index, must not be {@literal null}
+	 * @param <T>
+	 * @return a {@link Mono} emitting matching entities in a {@link SearchHits}.
+	 * @since 4.1
+	 */
+	<T> Mono<SearchPage<T>> searchForPage(Query query, Class<?> entityType, Class<T> resultType, IndexCoordinates index);
+
+	/**
+	 * Perform an aggregation specified by the given {@link Query query}. <br />
+	 *
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @return a {@link Flux} emitting matching aggregations one by one.
+	 * @since 4.0
+	 */
+	Flux<Aggregation> aggregate(Query query, Class<?> entityType);
+
+	/**
+	 * Perform an aggregation specified by the given {@link Query query}. <br />
+	 *
+	 * @param query must not be {@literal null}.
+	 * @param entityType must not be {@literal null}.
+	 * @param index the target index, must not be {@literal null}
+	 * @return a {@link Flux} emitting matching aggregations one by one.
+	 * @since 4.0
+	 */
+	Flux<Aggregation> aggregate(Query query, Class<?> entityType, IndexCoordinates index);
+
+	/**
+	 * Does a suggest query
+	 *
+	 * @param suggestion the query
+	 * @param entityType must not be {@literal null}.
+	 * @return the suggest response
+	 */
+	Flux<Suggest> suggest(SuggestBuilder suggestion, Class<?> entityType);
+
+	/**
+	 * Does a suggest query
+	 *
+	 * @param suggestion the query
+	 * @param index the index to run the query against
+	 * @return the suggest response
+	 */
+	Flux<Suggest> suggest(SuggestBuilder suggestion, IndexCoordinates index);
 }

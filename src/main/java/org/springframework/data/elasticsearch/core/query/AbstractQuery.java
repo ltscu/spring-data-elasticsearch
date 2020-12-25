@@ -25,6 +25,7 @@ import java.util.Optional;
 
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
+import org.elasticsearch.common.unit.TimeValue;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.lang.Nullable;
@@ -56,8 +57,10 @@ abstract class AbstractQuery implements Query {
 	@Nullable protected String preference;
 	@Nullable protected Integer maxResults;
 	@Nullable protected HighlightQuery highlightQuery;
-	private boolean trackTotalHits = false;
+	@Nullable private Boolean trackTotalHits;
+	@Nullable private Integer trackTotalHitsUpTo;
 	@Nullable private Duration scrollTime;
+	@Nullable private TimeValue timeout;
 
 	@Override
 	@Nullable
@@ -220,13 +223,25 @@ abstract class AbstractQuery implements Query {
 	}
 
 	@Override
-	public void setTrackTotalHits(boolean trackTotalHits) {
+	public void setTrackTotalHits(@Nullable Boolean trackTotalHits) {
 		this.trackTotalHits = trackTotalHits;
 	}
 
 	@Override
-	public boolean getTrackTotalHits() {
+	@Nullable
+	public Boolean getTrackTotalHits() {
 		return trackTotalHits;
+	}
+
+	@Override
+	public void setTrackTotalHitsUpTo(@Nullable Integer trackTotalHitsUpTo) {
+		this.trackTotalHitsUpTo = trackTotalHitsUpTo;
+	}
+
+	@Override
+	@Nullable
+	public Integer getTrackTotalHitsUpTo() {
+		return trackTotalHitsUpTo;
 	}
 
 	@Nullable
@@ -238,5 +253,21 @@ abstract class AbstractQuery implements Query {
 	@Override
 	public void setScrollTime(@Nullable Duration scrollTime) {
 		this.scrollTime = scrollTime;
+	}
+
+	@Nullable
+	@Override
+	public TimeValue getTimeout() {
+		return timeout;
+	}
+
+	/**
+	 * set the query timeout
+	 *
+	 * @param timeout
+	 * @since 4.2
+	 */
+	public void setTimeout(@Nullable TimeValue timeout) {
+		this.timeout = timeout;
 	}
 }

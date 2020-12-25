@@ -15,31 +15,32 @@
  */
 package org.springframework.data.elasticsearch.core.mapping;
 
-import static org.springframework.util.StringUtils.*;
-
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.index.VersionType;
-import org.springframework.beans.BeansException;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
-import org.springframework.context.expression.BeanFactoryAccessor;
-import org.springframework.context.expression.BeanFactoryResolver;
-import org.springframework.data.elasticsearch.annotations.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.data.elasticsearch.annotations.Parent;
 import org.springframework.data.elasticsearch.annotations.Setting;
+import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.join.JoinField;
 import org.springframework.data.mapping.MappingException;
 import org.springframework.data.mapping.PropertyHandler;
 import org.springframework.data.mapping.model.BasicPersistentEntity;
 import org.springframework.data.mapping.model.PersistentPropertyAccessorFactory;
+import org.springframework.data.spel.EvaluationContextProvider;
+import org.springframework.data.spel.ExpressionDependencies;
+import org.springframework.data.util.Lazy;
 import org.springframework.data.util.TypeInformation;
+import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ParserContext;
+import org.springframework.expression.common.LiteralExpression;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
@@ -53,41 +54,47 @@ import org.springframework.util.Assert;
  * @author Sascha Woo
  * @author Ivan Greene
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
+ * @author Subhobrata Dey
  */
 public class SimpleElasticsearchPersistentEntity<T> extends BasicPersistentEntity<T, ElasticsearchPersistentProperty>
-		implements ElasticsearchPersistentEntity<T>, ApplicationContextAware {
+		implements ElasticsearchPersistentEntity<T> {
 
-	private final StandardEvaluationContext context;
-	private final SpelExpressionParser parser;
+	private static final Logger LOGGER = LoggerFactory.getLogger(SimpleElasticsearchPersistentEntity.class);
+	private static final SpelExpressionParser PARSER = new SpelExpressionParser();
 
 	private @Nullable String indexName;
-	private @Nullable String indexType;
 	private boolean useServerConfiguration;
 	private short shards;
 	private short replicas;
 	private @Nullable String refreshInterval;
 	private @Nullable String indexStoreType;
-	private @Nullable String parentType;
-	private @Nullable ElasticsearchPersistentProperty parentIdProperty;
+	@Deprecated private @Nullable String parentType;
+	@Deprecated private @Nullable ElasticsearchPersistentProperty parentIdProperty;
 	private @Nullable ElasticsearchPersistentProperty scoreProperty;
+	private @Nullable ElasticsearchPersistentProperty seqNoPrimaryTermProperty;
+	private @Nullable ElasticsearchPersistentProperty joinFieldProperty;
 	private @Nullable String settingPath;
 	private @Nullable VersionType versionType;
 	private boolean createIndexAndMapping;
 	private final Map<String, ElasticsearchPersistentProperty> fieldNamePropertyCache = new ConcurrentHashMap<>();
 
+	private final ConcurrentHashMap<String, Expression> indexNameExpressions = new ConcurrentHashMap<>();
+	private final Lazy<EvaluationContext> indexNameEvaluationContext = Lazy.of(this::getIndexNameEvaluationContext);
+
 	public SimpleElasticsearchPersistentEntity(TypeInformation<T> typeInformation) {
 
 		super(typeInformation);
-		this.context = new StandardEvaluationContext();
-		this.parser = new SpelExpressionParser();
 
 		Class<T> clazz = typeInformation.getType();
-		if (clazz.isAnnotationPresent(Document.class)) {
-			Document document = clazz.getAnnotation(Document.class);
+		org.springframework.data.elasticsearch.annotations.Document document = AnnotatedElementUtils
+				.findMergedAnnotation(clazz, org.springframework.data.elasticsearch.annotations.Document.class);
+
+		if (document != null) {
+
 			Assert.hasText(document.indexName(),
 					" Unknown indexName. Make sure the indexName is defined. e.g @Document(indexName=\"foo\")");
 			this.indexName = document.indexName();
-			this.indexType = hasText(document.type()) ? document.type() : clazz.getSimpleName().toLowerCase(Locale.ENGLISH);
 			this.useServerConfiguration = document.useServerConfiguration();
 			this.shards = document.shards();
 			this.replicas = document.replicas();
@@ -96,41 +103,21 @@ public class SimpleElasticsearchPersistentEntity<T> extends BasicPersistentEntit
 			this.versionType = document.versionType();
 			this.createIndexAndMapping = document.createIndex();
 		}
-		if (clazz.isAnnotationPresent(Setting.class)) {
-			this.settingPath = typeInformation.getType().getAnnotation(Setting.class).settingPath();
-		}
-	}
 
-	@Override
-	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-		context.addPropertyAccessor(new BeanFactoryAccessor());
-		context.setBeanResolver(new BeanFactoryResolver(applicationContext));
-		context.setRootObject(applicationContext);
+		Setting setting = AnnotatedElementUtils.getMergedAnnotation(clazz, Setting.class);
+
+		if (setting != null) {
+			this.settingPath = setting.settingPath();
+		}
 	}
 
 	private String getIndexName() {
-
-		if (indexName != null) {
-			Expression expression = parser.parseExpression(indexName, ParserContext.TEMPLATE_EXPRESSION);
-			return expression.getValue(context, String.class);
-		}
-
-		return getTypeInformation().getType().getSimpleName();
-	}
-
-	private String getIndexType() {
-
-		if (indexType != null) {
-			Expression expression = parser.parseExpression(indexType, ParserContext.TEMPLATE_EXPRESSION);
-			return expression.getValue(context, String.class);
-		}
-
-		return "";
+		return indexName != null ? indexName : getTypeInformation().getType().getSimpleName();
 	}
 
 	@Override
 	public IndexCoordinates getIndexCoordinates() {
-		return IndexCoordinates.of(getIndexName()).withTypes(getIndexType());
+		return resolve(IndexCoordinates.of(getIndexName()));
 	}
 
 	@Nullable
@@ -162,12 +149,14 @@ public class SimpleElasticsearchPersistentEntity<T> extends BasicPersistentEntit
 
 	@Nullable
 	@Override
+	@Deprecated
 	public String getParentType() {
 		return parentType;
 	}
 
 	@Nullable
 	@Override
+	@Deprecated
 	public ElasticsearchPersistentProperty getParentIdProperty() {
 		return parentIdProperty;
 	}
@@ -231,6 +220,51 @@ public class SimpleElasticsearchPersistentEntity<T> extends BasicPersistentEntit
 
 			this.scoreProperty = property;
 		}
+
+		if (property.isSeqNoPrimaryTermProperty()) {
+
+			ElasticsearchPersistentProperty seqNoPrimaryTermProperty = this.seqNoPrimaryTermProperty;
+
+			if (seqNoPrimaryTermProperty != null) {
+				throw new MappingException(String.format(
+						"Attempt to add SeqNoPrimaryTerm property %s but already have property %s registered "
+								+ "as SeqNoPrimaryTerm property. Check your entity configuration!",
+						property.getField(), seqNoPrimaryTermProperty.getField()));
+			}
+
+			this.seqNoPrimaryTermProperty = property;
+
+			if (hasVersionProperty()) {
+				warnAboutBothSeqNoPrimaryTermAndVersionProperties();
+			}
+		}
+
+		if (property.isVersionProperty()) {
+			if (hasSeqNoPrimaryTermProperty()) {
+				warnAboutBothSeqNoPrimaryTermAndVersionProperties();
+			}
+		}
+
+		Class<?> actualType = property.getActualTypeOrNull();
+		if (actualType == JoinField.class) {
+			ElasticsearchPersistentProperty joinProperty = this.joinFieldProperty;
+
+			if (joinProperty != null) {
+				throw new MappingException(
+						String.format(
+								"Attempt to add Join property %s but already have property %s registered "
+										+ "as Join property. Check your entity configuration!",
+								property.getField(), joinProperty.getField()));
+			}
+
+			this.joinFieldProperty = property;
+		}
+	}
+
+	private void warnAboutBothSeqNoPrimaryTermAndVersionProperties() {
+		LOGGER.warn(
+				"Both SeqNoPrimaryTerm and @Version properties are defined on {}. Version will not be sent in index requests when seq_no is sent!",
+				getType());
 	}
 
 	/*
@@ -261,5 +295,109 @@ public class SimpleElasticsearchPersistentEntity<T> extends BasicPersistentEntit
 
 			return propertyRef.get();
 		});
+	}
+
+	@Override
+	public boolean hasSeqNoPrimaryTermProperty() {
+		return seqNoPrimaryTermProperty != null;
+	}
+
+	@Override
+	public boolean hasJoinFieldProperty() {
+		return joinFieldProperty != null;
+	}
+
+	@Override
+	@Nullable
+	public ElasticsearchPersistentProperty getSeqNoPrimaryTermProperty() {
+		return seqNoPrimaryTermProperty;
+	}
+
+	@Nullable
+	@Override
+	public ElasticsearchPersistentProperty getJoinFieldProperty() {
+		return joinFieldProperty;
+	}
+
+	// region SpEL handling
+	/**
+	 * resolves all the names in the IndexCoordinates object. If a name cannot be resolved, the original name is returned.
+	 *
+	 * @param indexCoordinates IndexCoordinates with names to resolve
+	 * @return IndexCoordinates with resolved names
+	 */
+	private IndexCoordinates resolve(IndexCoordinates indexCoordinates) {
+
+		String[] indexNames = indexCoordinates.getIndexNames();
+		String[] resolvedNames = new String[indexNames.length];
+
+		for (int i = 0; i < indexNames.length; i++) {
+			String indexName = indexNames[i];
+			resolvedNames[i] = resolve(indexName);
+		}
+
+		return IndexCoordinates.of(resolvedNames);
+	}
+
+	/**
+	 * tries to resolve the given name. If this is not successful, the original value is returned
+	 *
+	 * @param name name to resolve
+	 * @return the resolved name or the input name if it cannot be resolved
+	 */
+	private String resolve(String name) {
+
+		Assert.notNull(name, "name must not be null");
+
+		Expression expression = getExpressionForIndexName(name);
+
+		String resolvedName = expression != null ? expression.getValue(indexNameEvaluationContext.get(), String.class) : null;
+		return resolvedName != null ? resolvedName : name;
+	}
+
+	/**
+	 * returns an {@link Expression} for #name if name contains a {@link ParserContext#TEMPLATE_EXPRESSION} otherwise
+	 * returns {@literal null}.
+	 * 
+	 * @param name the name to get the expression for
+	 * @return Expression may be null
+	 */
+	@Nullable
+	private Expression getExpressionForIndexName(String name) {
+		return indexNameExpressions.computeIfAbsent(name, s -> {
+			Expression expr = PARSER.parseExpression(s, ParserContext.TEMPLATE_EXPRESSION);
+			return expr instanceof LiteralExpression ? null : expr;
+		});
+	}
+
+	/**
+	 * build the {@link EvaluationContext} considering {@link ExpressionDependencies} from the name returned by
+	 * {@link #getIndexName()}.
+	 * 
+	 * @return EvaluationContext
+	 */
+	private EvaluationContext getIndexNameEvaluationContext() {
+
+		Expression expression = getExpressionForIndexName(getIndexName());
+		ExpressionDependencies expressionDependencies = expression != null ? ExpressionDependencies.discover(expression)
+				: ExpressionDependencies.none();
+
+		return getEvaluationContext(null, expressionDependencies);
+	}
+
+	// endregion
+
+	@Override
+	public Document getDefaultSettings() {
+
+		if (isUseServerConfiguration()) {
+			return Document.create();
+		}
+
+		Map<String, String> map = new MapBuilder<String, String>()
+				.put("index.number_of_shards", String.valueOf(getShards()))
+				.put("index.number_of_replicas", String.valueOf(getReplicas()))
+				.put("index.refresh_interval", getRefreshInterval()).put("index.store.type", getIndexStoreType()).map();
+		return Document.from(map);
 	}
 }

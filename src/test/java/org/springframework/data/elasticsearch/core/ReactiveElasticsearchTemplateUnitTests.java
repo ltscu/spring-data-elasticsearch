@@ -24,7 +24,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -36,9 +35,11 @@ import java.util.Collections;
 
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.main.MainResponse;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
+import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.reindex.DeleteByQueryRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +57,7 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.ScriptedField;
 import org.springframework.data.elasticsearch.client.reactive.ReactiveElasticsearchClient;
 import org.springframework.data.elasticsearch.core.geo.GeoPoint;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.data.elasticsearch.core.query.Query;
@@ -71,10 +73,13 @@ public class ReactiveElasticsearchTemplateUnitTests {
 	@Mock ReactiveElasticsearchClient client;
 	ReactiveElasticsearchTemplate template;
 
-	private IndexCoordinates index = IndexCoordinates.of("index").withTypes("type");
+	private IndexCoordinates index = IndexCoordinates.of("index");
 
 	@BeforeEach
 	public void setUp() {
+
+		when(client.info()).thenReturn(Mono.just(new MainResponse("mockNodename", org.elasticsearch.Version.CURRENT,
+				new ClusterName("mockCluster"), "mockUuid", null)));
 
 		template = new ReactiveElasticsearchTemplate(client);
 	}
@@ -258,8 +263,7 @@ public class ReactiveElasticsearchTemplateUnitTests {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	@Builder
-	@Document(indexName = "test-index-sample-core-reactive-template-Unit", replicas = 0,
-			refreshInterval = "-1")
+	@Document(indexName = "test-index-sample-core-reactive-template-Unit", replicas = 0, refreshInterval = "-1")
 	static class SampleEntity {
 
 		@Id private String id;

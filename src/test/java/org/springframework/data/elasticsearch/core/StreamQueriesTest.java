@@ -18,17 +18,18 @@ package org.springframework.data.elasticsearch.core;
 import static org.assertj.core.api.Assertions.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.util.CloseableIterator;
-import org.springframework.lang.Nullable;
+import org.springframework.data.util.StreamUtils;
 
 /**
  * @author Sascha Woo
+ * @author Peter-Josef Meisch
  */
 public class StreamQueriesTest {
 
@@ -36,42 +37,131 @@ public class StreamQueriesTest {
 	public void shouldCallClearScrollOnIteratorClose() {
 
 		// given
-		List<String> results = new ArrayList<>();
-		results.add("one");
+		List<SearchHit<String>> hits = new ArrayList<>();
+		hits.add(new SearchHit<String>(null, null, 0, null, null, "one"));
 
-		ScrolledPage<String> page = new ScrolledPageImpl("1234", results);
+		SearchScrollHits<String> searchHits = newSearchScrollHits(hits, "1234");
 
 		AtomicBoolean clearScrollCalled = new AtomicBoolean(false);
 
 		// when
-		CloseableIterator<String> closeableIterator = StreamQueries.streamResults( //
-				page, //
-				scrollId -> new ScrolledPageImpl(scrollId, Collections.emptyList()), //
-				scrollId -> clearScrollCalled.set(true));
+		SearchHitsIterator<String> iterator = StreamQueries.streamResults( //
+				0, //
+				searchHits, //
+				scrollId -> newSearchScrollHits(Collections.emptyList(), scrollId), //
+				scrollIds -> clearScrollCalled.set(true));
 
-		while (closeableIterator.hasNext()) {
-			closeableIterator.next();
+		while (iterator.hasNext()) {
+			iterator.next();
 		}
-		closeableIterator.close();
+		iterator.close();
 
 		// then
 		assertThat(clearScrollCalled).isTrue();
 
 	}
 
-	private static class ScrolledPageImpl extends PageImpl<String> implements ScrolledPage<String> {
+	@Test // DATAES-766
+	public void shouldReturnTotalHits() {
 
-		private String scrollId;
+		// given
+		List<SearchHit<String>> hits = new ArrayList<>();
+		hits.add(new SearchHit<String>(null, null, 0, null, null, "one"));
 
-		public ScrolledPageImpl(String scrollId, List<String> content) {
-			super(content);
-			this.scrollId = scrollId;
+		SearchScrollHits<String> searchHits = newSearchScrollHits(hits, "1234");
+
+		// when
+		SearchHitsIterator<String> iterator = StreamQueries.streamResults( //
+				0, //
+				searchHits, //
+				scrollId -> newSearchScrollHits(Collections.emptyList(), scrollId), //
+				scrollId -> {});
+
+		// then
+		assertThat(iterator.getTotalHits()).isEqualTo(1);
+
+	}
+
+	@Test // DATAES-817
+	void shouldClearAllScrollIds() {
+
+		SearchScrollHits<String> searchHits1 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-1");
+		SearchScrollHits<String> searchHits2 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-2");
+		SearchScrollHits<String> searchHits3 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-2");
+		SearchScrollHits<String> searchHits4 = newSearchScrollHits(Collections.emptyList(), "s-3");
+
+		Iterator<SearchScrollHits<String>> searchScrollHitsIterator = Arrays
+				.asList(searchHits1, searchHits2, searchHits3, searchHits4).iterator();
+
+		List<String> clearedScrollIds = new ArrayList<>();
+		SearchHitsIterator<String> iterator = StreamQueries.streamResults( //
+				0, //
+				searchScrollHitsIterator.next(), //
+				scrollId -> searchScrollHitsIterator.next(), //
+				scrollIds -> clearedScrollIds.addAll(scrollIds));
+
+		while (iterator.hasNext()) {
+			iterator.next();
 		}
+		iterator.close();
 
-		@Override
-		@Nullable
-		public String getScrollId() {
-			return scrollId;
-		}
+		assertThat(clearedScrollIds).isEqualTo(Arrays.asList("s-1", "s-2", "s-3"));
+	}
+
+	@Test // DATAES-831
+	void shouldReturnAllForRequestedSizeOf0() {
+
+		SearchScrollHits<String> searchHits1 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-1");
+		SearchScrollHits<String> searchHits2 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-2");
+		SearchScrollHits<String> searchHits3 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-2");
+		SearchScrollHits<String> searchHits4 = newSearchScrollHits(Collections.emptyList(), "s-3");
+
+		Iterator<SearchScrollHits<String>> searchScrollHitsIterator = Arrays
+				.asList(searchHits1, searchHits2, searchHits3, searchHits4).iterator();
+
+		SearchHitsIterator<String> iterator = StreamQueries.streamResults( //
+				0, //
+				searchScrollHitsIterator.next(), //
+				scrollId -> searchScrollHitsIterator.next(), //
+				scrollIds -> {});
+
+		long count = StreamUtils.createStreamFromIterator(iterator).count();
+
+		assertThat(count).isEqualTo(3);
+	}
+
+	@Test // DATAES-831
+	void shouldOnlyReturnRequestedCount() {
+
+		SearchScrollHits<String> searchHits1 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-1");
+		SearchScrollHits<String> searchHits2 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-2");
+		SearchScrollHits<String> searchHits3 = newSearchScrollHits(
+				Collections.singletonList(new SearchHit<String>(null, null, 0, null, null, "one")), "s-2");
+		SearchScrollHits<String> searchHits4 = newSearchScrollHits(Collections.emptyList(), "s-3");
+
+		Iterator<SearchScrollHits<String>> searchScrollHitsIterator = Arrays
+				.asList(searchHits1, searchHits2, searchHits3, searchHits4).iterator();
+
+		SearchHitsIterator<String> iterator = StreamQueries.streamResults( //
+				2, //
+				searchScrollHitsIterator.next(), //
+				scrollId -> searchScrollHitsIterator.next(), //
+				scrollIds -> {});
+
+		long count = StreamUtils.createStreamFromIterator(iterator).count();
+
+		assertThat(count).isEqualTo(2);
+	}
+
+	private SearchScrollHits<String> newSearchScrollHits(List<SearchHit<String>> hits, String scrollId) {
+		return new SearchHitsImpl<String>(hits.size(), TotalHitsRelation.EQUAL_TO, 0, scrollId, hits, null);
 	}
 }

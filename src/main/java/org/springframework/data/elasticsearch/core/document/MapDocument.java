@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * {@link Document} implementation backed by a {@link LinkedHashMap}.
  *
  * @author Mark Paluch
+ * @author Roman Puchkovskiy
  * @since 4.0
  */
 class MapDocument implements Document {
@@ -39,8 +40,11 @@ class MapDocument implements Document {
 
 	private final LinkedHashMap<String, Object> documentAsMap;
 
+	private @Nullable String index;
 	private @Nullable String id;
 	private @Nullable Long version;
+	private @Nullable Long seqNo;
+	private @Nullable Long primaryTerm;
 
 	MapDocument() {
 		this(new LinkedHashMap<>());
@@ -48,6 +52,17 @@ class MapDocument implements Document {
 
 	MapDocument(Map<String, ? extends Object> documentAsMap) {
 		this.documentAsMap = new LinkedHashMap<>(documentAsMap);
+	}
+
+	@Override
+	public void setIndex(@Nullable String index) {
+		this.index = index;
+	}
+
+	@Nullable
+	@Override
+	public String getIndex() {
+		return index;
 	}
 
 	/*
@@ -112,6 +127,68 @@ class MapDocument implements Document {
 	@Override
 	public void setVersion(long version) {
 		this.version = version;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.elasticsearch.core.document.Document#hasSeqNo()
+	 */
+	@Override
+	public boolean hasSeqNo() {
+		return this.seqNo != null;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.elasticsearch.core.document.Document#getSeqNo()
+	 */
+	@Override
+	public long getSeqNo() {
+
+		if (!hasSeqNo()) {
+			throw new IllegalStateException("No seq_no associated with this Document");
+		}
+
+		return this.seqNo;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.elasticsearch.core.document.Document#setSeqNo()
+	 */
+	public void setSeqNo(long seqNo) {
+		this.seqNo = seqNo;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.elasticsearch.core.document.Document#hasPrimaryTerm()
+	 */
+	@Override
+	public boolean hasPrimaryTerm() {
+		return this.primaryTerm != null;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.elasticsearch.core.document.Document#getPrimaryTerm()
+	 */
+	@Override
+	public long getPrimaryTerm() {
+
+		if (!hasPrimaryTerm()) {
+			throw new IllegalStateException("No primary_term associated with this Document");
+		}
+
+		return this.primaryTerm;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.elasticsearch.core.document.Document#setPrimaryTerm()
+	 */
+	public void setPrimaryTerm(long primaryTerm) {
+		this.primaryTerm = primaryTerm;
 	}
 
 	/*

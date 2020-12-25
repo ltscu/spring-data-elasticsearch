@@ -16,13 +16,19 @@
 package org.springframework.data.elasticsearch.core;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.elasticsearch.action.ActionFuture;
+import org.elasticsearch.action.admin.cluster.node.info.NodesInfoAction;
+import org.elasticsearch.action.admin.cluster.node.info.NodesInfoRequestBuilder;
+import org.elasticsearch.action.admin.cluster.node.info.NodesInfoResponse;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.delete.DeleteRequestBuilder;
 import org.elasticsearch.action.get.GetRequestBuilder;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.get.MultiGetRequestBuilder;
 import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.MultiSearchRequest;
 import org.elasticsearch.action.search.MultiSearchResponse;
 import org.elasticsearch.action.search.SearchRequestBuilder;
@@ -33,8 +39,8 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.search.suggest.SuggestBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
+import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.document.DocumentAdapters;
 import org.springframework.data.elasticsearch.core.document.SearchDocumentResponse;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
@@ -74,15 +80,19 @@ import org.springframework.util.Assert;
  * @author Martin Choraine
  * @author Farid Azaza
  * @author Gyula Attila Csorogi
+ * @author Roman Puchkovskiy
  * @deprecated as of 4.0
  */
 @Deprecated
 public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	private static final Logger QUERY_LOGGER = LoggerFactory
 			.getLogger("org.springframework.data.elasticsearch.core.QUERY");
+	private static final Logger LOGGER = LoggerFactory.getLogger(ElasticsearchTemplate.class);
 
 	private Client client;
 	@Nullable private String searchTimeout;
+
+	private final ElasticsearchExceptionTranslator exceptionTranslator = new ElasticsearchExceptionTranslator();
 
 	// region Initialization
 	public ElasticsearchTemplate(Client client) {
@@ -134,18 +144,23 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	// endregion
 
 	// region DocumentOperations
-	@Override
-	public String index(IndexQuery query, IndexCoordinates index) {
-
-		maybeCallbackBeforeConvertWithQuery(query);
+	public String doIndex(IndexQuery query, IndexCoordinates index) {
 
 		IndexRequestBuilder indexRequestBuilder = requestFactory.indexRequestBuilder(client, query, index);
-		String documentId = indexRequestBuilder.execute().actionGet().getId();
+		ActionFuture<IndexResponse> future = indexRequestBuilder.execute();
+		IndexResponse response;
+		try {
+			response = future.actionGet();
+		} catch (RuntimeException e) {
+			throw translateException(e);
+		}
+		String documentId = response.getId();
 
 		// We should call this because we are not going through a mapper.
 		Object queryObject = query.getObject();
 		if (queryObject != null) {
-			setPersistentEntityId(queryObject, documentId);
+			updateIndexedObject(queryObject, IndexedObjectInformation.of(documentId, response.getSeqNo(),
+					response.getPrimaryTerm(), response.getVersion()));
 		}
 
 		return documentId;
@@ -156,18 +171,22 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	public <T> T get(String id, Class<T> clazz, IndexCoordinates index) {
 		GetRequestBuilder getRequestBuilder = requestFactory.getRequestBuilder(client, id, index);
 		GetResponse response = getRequestBuilder.execute().actionGet();
-		return elasticsearchConverter.mapDocument(DocumentAdapters.from(response), clazz);
+
+		DocumentCallback<T> callback = new ReadDocumentCallback<>(elasticsearchConverter, clazz, index);
+		return callback.doWith(DocumentAdapters.from(response));
 	}
 
 	@Override
 	public <T> List<T> multiGet(Query query, Class<T> clazz, IndexCoordinates index) {
 
 		Assert.notNull(index, "index must not be null");
-		Assert.notEmpty(query.getIds(), "No Id define for Query");
+		Assert.notEmpty(query.getIds(), "No Ids defined for Query");
 
-		MultiGetRequestBuilder builder = requestFactory.multiGetRequestBuilder(client, query, index);
+		MultiGetRequestBuilder builder = requestFactory.multiGetRequestBuilder(client, query, clazz, index);
 
-		return elasticsearchConverter.mapDocuments(DocumentAdapters.from(builder.execute().actionGet()), clazz);
+		DocumentCallback<T> callback = new ReadDocumentCallback<>(elasticsearchConverter, clazz, index);
+		List<Document> documents = DocumentAdapters.from(builder.execute().actionGet());
+		return documents.stream().map(callback::doWith).collect(Collectors.toList());
 	}
 
 	@Override
@@ -175,15 +194,6 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		GetRequestBuilder getRequestBuilder = requestFactory.getRequestBuilder(client, id, index);
 		getRequestBuilder.setFetchSource(false);
 		return getRequestBuilder.execute().actionGet().isExists();
-	}
-
-	@Override
-	public List<String> bulkIndex(List<IndexQuery> queries, BulkOptions bulkOptions, IndexCoordinates index) {
-
-		Assert.notNull(queries, "List of IndexQuery must not be null");
-		Assert.notNull(bulkOptions, "BulkOptions must not be null");
-
-		return doBulkOperation(queries, bulkOptions, index);
 	}
 
 	@Override
@@ -196,13 +206,14 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	}
 
 	@Override
-	public String delete(String id, IndexCoordinates index) {
+	public String delete(String id, @Nullable String routing, IndexCoordinates index) {
 
 		Assert.notNull(id, "id must not be null");
 		Assert.notNull(index, "index must not be null");
 
-		return client.prepareDelete(index.getIndexName(), IndexCoordinates.TYPE, elasticsearchConverter.convertId(id))
-				.execute().actionGet().getId();
+		DeleteRequestBuilder deleteRequestBuilder = requestFactory.deleteRequestBuilder(client,
+				elasticsearchConverter.convertId(id), routing, index);
+		return deleteRequestBuilder.execute().actionGet().getId();
 	}
 
 	@Override
@@ -229,10 +240,13 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		return new UpdateResponse(result);
 	}
 
-	private List<String> doBulkOperation(List<?> queries, BulkOptions bulkOptions, IndexCoordinates index) {
-		maybeCallbackBeforeConvertWithQueries(queries);
+	public List<IndexedObjectInformation> doBulkOperation(List<?> queries, BulkOptions bulkOptions,
+			IndexCoordinates index) {
 		BulkRequestBuilder bulkRequest = requestFactory.bulkRequestBuilder(client, queries, bulkOptions, index);
-		return checkForBulkOperationFailure(bulkRequest.execute().actionGet());
+		final List<IndexedObjectInformation> indexedObjectInformations = checkForBulkOperationFailure(
+				bulkRequest.execute().actionGet());
+		updateIndexedObjectsWithQueries(queries, indexedObjectInformations);
+		return indexedObjectInformations;
 	}
 	// endregion
 
@@ -243,7 +257,7 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		Assert.notNull(query, "query must not be null");
 		Assert.notNull(index, "index must not be null");
 
-		final boolean trackTotalHits = query.getTrackTotalHits();
+		final Boolean trackTotalHits = query.getTrackTotalHits();
 		query.setTrackTotalHits(true);
 		SearchRequestBuilder searchRequestBuilder = requestFactory.searchRequestBuilder(client, query, clazz, index);
 		query.setTrackTotalHits(trackTotalHits);
@@ -256,36 +270,57 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 	public <T> SearchHits<T> search(Query query, Class<T> clazz, IndexCoordinates index) {
 		SearchRequestBuilder searchRequestBuilder = requestFactory.searchRequestBuilder(client, query, clazz, index);
 		SearchResponse response = getSearchResponse(searchRequestBuilder);
-		return elasticsearchConverter.read(clazz, SearchDocumentResponse.from(response));
+
+		SearchDocumentResponseCallback<SearchHits<T>> callback = new ReadSearchDocumentResponseCallback<>(clazz, index);
+		return callback.doWith(SearchDocumentResponse.from(response));
 	}
 
 	@Override
-	public <T> ScrolledPage<SearchHit<T>> searchScrollStart(long scrollTimeInMillis, Query query, Class<T> clazz,
+	public <T> SearchScrollHits<T> searchScrollStart(long scrollTimeInMillis, Query query, Class<T> clazz,
 			IndexCoordinates index) {
-		Assert.notNull(query.getPageable(), "Query.pageable is required for scan & scroll");
 
-		SearchRequestBuilder searchRequestBuilder = requestFactory.searchRequestBuilder(client, query, clazz, index);
-		searchRequestBuilder.setScroll(TimeValue.timeValueMillis(scrollTimeInMillis));
-		SearchResponse response = getSearchResponse(searchRequestBuilder);
-		return elasticsearchConverter.mapResults(SearchDocumentResponse.from(response), clazz, null);
+		Assert.notNull(query.getPageable(), "pageable of query must not be null.");
+
+		ActionFuture<SearchResponse> action = requestFactory.searchRequestBuilder(client, query, clazz, index) //
+				.setScroll(TimeValue.timeValueMillis(scrollTimeInMillis)) //
+				.execute();
+
+		SearchResponse response = getSearchResponseWithTimeout(action);
+
+		SearchDocumentResponseCallback<SearchScrollHits<T>> callback = new ReadSearchScrollDocumentResponseCallback<>(clazz,
+				index);
+		return callback.doWith(SearchDocumentResponse.from(response));
 	}
 
 	@Override
-	public <T> ScrolledPage<SearchHit<T>> searchScrollContinue(@Nullable String scrollId, long scrollTimeInMillis,
-			Class<T> clazz) {
-		SearchResponse response = getSearchResponseWithTimeout(
-				client.prepareSearchScroll(scrollId).setScroll(TimeValue.timeValueMillis(scrollTimeInMillis)).execute());
-		return elasticsearchConverter.mapResults(SearchDocumentResponse.from(response), clazz, Pageable.unpaged());
+	public <T> SearchScrollHits<T> searchScrollContinue(@Nullable String scrollId, long scrollTimeInMillis,
+			Class<T> clazz, IndexCoordinates index) {
+
+		ActionFuture<SearchResponse> action = client //
+				.prepareSearchScroll(scrollId) //
+				.setScroll(TimeValue.timeValueMillis(scrollTimeInMillis)) //
+				.execute();
+
+		SearchResponse response = getSearchResponseWithTimeout(action);
+
+		SearchDocumentResponseCallback<SearchScrollHits<T>> callback = new ReadSearchScrollDocumentResponseCallback<>(clazz,
+				index);
+		return callback.doWith(SearchDocumentResponse.from(response));
 	}
 
 	@Override
-	public void searchScrollClear(String scrollId) {
-		client.prepareClearScroll().addScrollId(scrollId).execute().actionGet();
+	public void searchScrollClear(List<String> scrollIds) {
+		try {
+			client.prepareClearScroll().setScrollIds(scrollIds).execute().actionGet();
+		} catch (Exception e) {
+			LOGGER.warn("Could not clear scroll: {}", e.getMessage());
+		}
 	}
 
 	@Override
 	public SearchResponse suggest(SuggestBuilder suggestion, IndexCoordinates index) {
-		return client.prepareSearch(index.getIndexNames()).suggest(suggestion).get();
+		SearchRequestBuilder searchRequestBuilder = requestFactory.searchRequestBuilder(client, suggestion, index);
+		return searchRequestBuilder.get();
 	}
 
 	@Override
@@ -309,4 +344,41 @@ public class ElasticsearchTemplate extends AbstractElasticsearchTemplate {
 		return searchTimeout == null ? response.actionGet() : response.actionGet(searchTimeout);
 	}
 	// endregion
+
+	// region helper methods
+	@Override
+	protected String getClusterVersion() {
+
+		try {
+			NodesInfoResponse nodesInfoResponse = client.admin().cluster()
+					.nodesInfo(new NodesInfoRequestBuilder(client, NodesInfoAction.INSTANCE).request()).actionGet();
+			if (!nodesInfoResponse.getNodes().isEmpty()) {
+				return nodesInfoResponse.getNodes().get(0).getVersion().toString();
+			}
+		} catch (Exception ignored) {}
+		return null;
+	}
+
+	public Client getClient() {
+		return client;
+	}
+	// endregion
+
+	/**
+	 * translates an Exception if possible. Exceptions that are no {@link RuntimeException}s are wrapped in a
+	 * RuntimeException
+	 *
+	 * @param exception the Exception to map
+	 * @return the potentially translated RuntimeException.
+	 * @since 4.0
+	 */
+	private RuntimeException translateException(Exception exception) {
+
+		RuntimeException runtimeException = exception instanceof RuntimeException ? (RuntimeException) exception
+				: new RuntimeException(exception.getMessage(), exception);
+		RuntimeException potentiallyTranslatedException = exceptionTranslator
+				.translateExceptionIfPossible(runtimeException);
+
+		return potentiallyTranslatedException != null ? potentiallyTranslatedException : runtimeException;
+	}
 }

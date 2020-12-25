@@ -19,7 +19,8 @@ import reactor.core.publisher.Mono;
 
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.core.Ordered;
-import org.springframework.data.auditing.IsNewAwareAuditingHandler;
+import org.springframework.data.auditing.ReactiveIsNewAwareAuditingHandler;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.mapping.callback.EntityCallback;
 import org.springframework.util.Assert;
 
@@ -27,19 +28,20 @@ import org.springframework.util.Assert;
  * {@link EntityCallback} to populate auditing related fields on an entity about to be saved.
  *
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
  * @since 4.0
  */
 public class ReactiveAuditingEntityCallback implements ReactiveBeforeConvertCallback<Object>, Ordered {
 
-	private final ObjectFactory<IsNewAwareAuditingHandler> auditingHandlerFactory;
+	private final ObjectFactory<ReactiveIsNewAwareAuditingHandler> auditingHandlerFactory;
 
 	/**
-	 * Creates a new {@link ReactiveAuditingEntityCallback} using the given {@link IsNewAwareAuditingHandler} provided by
-	 * the given {@link ObjectFactory}.
+	 * Creates a new {@link ReactiveAuditingEntityCallback} using the given {@link ReactiveIsNewAwareAuditingHandler}
+	 * provided by the given {@link ObjectFactory}.
 	 *
 	 * @param auditingHandlerFactory must not be {@literal null}.
 	 */
-	public ReactiveAuditingEntityCallback(ObjectFactory<IsNewAwareAuditingHandler> auditingHandlerFactory) {
+	public ReactiveAuditingEntityCallback(ObjectFactory<ReactiveIsNewAwareAuditingHandler> auditingHandlerFactory) {
 
 		Assert.notNull(auditingHandlerFactory, "IsNewAwareAuditingHandler must not be null!");
 
@@ -47,8 +49,8 @@ public class ReactiveAuditingEntityCallback implements ReactiveBeforeConvertCall
 	}
 
 	@Override
-	public Mono<Object> onBeforeConvert(Object entity) {
-		return Mono.just(auditingHandlerFactory.getObject().markAudited(entity));
+	public Mono<Object> onBeforeConvert(Object entity, IndexCoordinates index) {
+		return auditingHandlerFactory.getObject().markAudited(entity);
 	}
 
 	@Override

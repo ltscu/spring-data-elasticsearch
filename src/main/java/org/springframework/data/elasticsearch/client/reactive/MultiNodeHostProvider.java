@@ -27,10 +27,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import org.springframework.data.elasticsearch.client.ElasticsearchHost;
 import org.springframework.data.elasticsearch.client.ElasticsearchHost.State;
 import org.springframework.data.elasticsearch.client.NoReachableHostException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.lang.Nullable;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -40,16 +42,20 @@ import org.springframework.web.reactive.function.client.WebClient;
  *
  * @author Christoph Strobl
  * @author Mark Paluch
+ * @author Peter-Josef Meisch
  * @since 3.2
  */
-class MultiNodeHostProvider implements HostProvider {
+class MultiNodeHostProvider implements HostProvider<MultiNodeHostProvider> {
 
 	private final WebClientProvider clientProvider;
+	private final Supplier<HttpHeaders> headersSupplier;
 	private final Map<InetSocketAddress, ElasticsearchHost> hosts;
 
-	MultiNodeHostProvider(WebClientProvider clientProvider, InetSocketAddress... endpoints) {
+	MultiNodeHostProvider(WebClientProvider clientProvider, Supplier<HttpHeaders> headersSupplier,
+			InetSocketAddress... endpoints) {
 
 		this.clientProvider = clientProvider;
+		this.headersSupplier = headersSupplier;
 		this.hosts = new ConcurrentHashMap<>();
 		for (InetSocketAddress endpoint : endpoints) {
 			this.hosts.put(endpoint, new ElasticsearchHost(endpoint, State.UNKNOWN));
@@ -117,29 +123,34 @@ class MultiNodeHostProvider implements HostProvider {
 				.map(ElasticsearchHost::getEndpoint).next();
 	}
 
-	private ElasticsearchHost updateNodeState(Tuple2<InetSocketAddress, ClientResponse> tuple2) {
+	private ElasticsearchHost updateNodeState(Tuple2<InetSocketAddress, State> tuple2) {
 
-		State state = tuple2.getT2().statusCode().isError() ? State.OFFLINE : State.ONLINE;
+		State state = tuple2.getT2();
 		ElasticsearchHost elasticsearchHost = new ElasticsearchHost(tuple2.getT1(), state);
 		hosts.put(tuple2.getT1(), elasticsearchHost);
 		return elasticsearchHost;
 	}
 
-	private Flux<Tuple2<InetSocketAddress, ClientResponse>> nodes(@Nullable State state) {
+	private Flux<Tuple2<InetSocketAddress, State>> nodes(@Nullable State state) {
 
 		return Flux.fromIterable(hosts()) //
 				.filter(entry -> state == null || entry.getState().equals(state)) //
 				.map(ElasticsearchHost::getEndpoint) //
 				.flatMap(host -> {
 
-					Mono<ClientResponse> exchange = createWebClient(host) //
-							.head().uri("/").exchange().doOnError(throwable -> {
-
+					Mono<ClientResponse> clientResponseMono = createWebClient(host) //
+							.head().uri("/") //
+							.headers(httpHeaders -> httpHeaders.addAll(headersSupplier.get())) //
+							.exchangeToMono(Mono::just) //
+							.doOnError(throwable -> {
 								hosts.put(host, new ElasticsearchHost(host, State.OFFLINE));
 								clientProvider.getErrorListener().accept(throwable);
 							});
 
-					return Mono.just(host).zipWith(exchange);
+					return Mono.just(host) //
+							.zipWith( //
+									clientResponseMono.flatMap(it -> it.releaseBody() //
+											.thenReturn(it.statusCode().isError() ? State.OFFLINE : State.ONLINE)));
 				}) //
 				.onErrorContinue((throwable, o) -> clientProvider.getErrorListener().accept(throwable));
 	}

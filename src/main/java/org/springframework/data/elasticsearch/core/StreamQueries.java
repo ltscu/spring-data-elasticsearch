@@ -16,11 +16,15 @@
 package org.springframework.data.elasticsearch.core;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.springframework.data.util.CloseableIterator;
+import org.elasticsearch.search.aggregations.Aggregations;
+import org.springframework.data.elasticsearch.client.util.ScrollState;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -33,61 +37,84 @@ import org.springframework.util.Assert;
 abstract class StreamQueries {
 
 	/**
-	 * Stream query results using {@link ScrolledPage}.
+	 * Stream query results using {@link SearchScrollHits}.
 	 *
-	 * @param page the initial scrolled page.
+	 * @param maxCount the maximum number of entities to return, a value of 0 means that all available entities are
+	 *          returned
+	 * @param searchHits the initial hits
 	 * @param continueScrollFunction function to continue scrolling applies to the current scrollId.
-	 * @param clearScrollConsumer consumer to clear the scroll context by accepting the current scrollId.
-	 * @param <T>
-	 * @return the {@link CloseableIterator}.
+	 * @param clearScrollConsumer consumer to clear the scroll context by accepting the scrollIds to clear.
+	 * @param <T> the entity type
+	 * @return the {@link SearchHitsIterator}.
 	 */
-	static <T> CloseableIterator<T> streamResults(ScrolledPage<T> page,
-			Function<String, ScrolledPage<T>> continueScrollFunction, Consumer<String> clearScrollConsumer) {
+	static <T> SearchHitsIterator<T> streamResults(int maxCount, SearchScrollHits<T> searchHits,
+			Function<String, SearchScrollHits<T>> continueScrollFunction, Consumer<List<String>> clearScrollConsumer) {
 
-		Assert.notNull(page, "page must not be null.");
-		Assert.notNull(page.getScrollId(), "scrollId must not be null.");
+		Assert.notNull(searchHits, "searchHits must not be null.");
+		Assert.notNull(searchHits.getScrollId(), "scrollId of searchHits must not be null.");
 		Assert.notNull(continueScrollFunction, "continueScrollFunction must not be null.");
 		Assert.notNull(clearScrollConsumer, "clearScrollConsumer must not be null.");
 
-		return new CloseableIterator<T>() {
+		Aggregations aggregations = searchHits.getAggregations();
+		float maxScore = searchHits.getMaxScore();
+		long totalHits = searchHits.getTotalHits();
+		TotalHitsRelation totalHitsRelation = searchHits.getTotalHitsRelation();
 
-			// As we couldn't retrieve single result with scroll, store current hits.
-			private volatile Iterator<T> scrollHits = page.iterator();
-			private volatile String scrollId = page.getScrollId();
-			private volatile boolean continueScroll = scrollHits.hasNext();
+		return new SearchHitsIterator<T>() {
+
+			private volatile AtomicInteger currentCount = new AtomicInteger();
+			private volatile Iterator<SearchHit<T>> currentScrollHits = searchHits.iterator();
+			private volatile boolean continueScroll = currentScrollHits.hasNext();
+			private volatile ScrollState scrollState = new ScrollState(searchHits.getScrollId());
 
 			@Override
 			public void close() {
+				clearScrollConsumer.accept(scrollState.getScrollIds());
+			}
 
-				try {
-					clearScrollConsumer.accept(scrollId);
-				} finally {
-					scrollHits = null;
-					scrollId = null;
-				}
+			@Override
+			@Nullable
+			public Aggregations getAggregations() {
+				return aggregations;
+			}
+
+			@Override
+			public float getMaxScore() {
+				return maxScore;
+			}
+
+			@Override
+			public long getTotalHits() {
+				return totalHits;
+			}
+
+			@Override
+			public TotalHitsRelation getTotalHitsRelation() {
+				return totalHitsRelation;
 			}
 
 			@Override
 			public boolean hasNext() {
 
-				if (!continueScroll) {
+				if (!continueScroll || (maxCount > 0 && currentCount.get() >= maxCount)) {
 					return false;
 				}
 
-				if (!scrollHits.hasNext()) {
-					ScrolledPage<T> nextPage = continueScrollFunction.apply(scrollId);
-					scrollHits = nextPage.iterator();
-					scrollId = nextPage.getScrollId();
-					continueScroll = scrollHits.hasNext();
+				if (!currentScrollHits.hasNext()) {
+					SearchScrollHits<T> nextPage = continueScrollFunction.apply(scrollState.getScrollId());
+					currentScrollHits = nextPage.iterator();
+					scrollState.updateScrollId(nextPage.getScrollId());
+					continueScroll = currentScrollHits.hasNext();
 				}
 
-				return scrollHits.hasNext();
+				return currentScrollHits.hasNext();
 			}
 
 			@Override
-			public T next() {
+			public SearchHit<T> next() {
 				if (hasNext()) {
-					return scrollHits.next();
+					currentCount.incrementAndGet();
+					return currentScrollHits.next();
 				}
 				throw new NoSuchElementException();
 			}
@@ -100,6 +127,5 @@ abstract class StreamQueries {
 	}
 
 	// utility constructor
-	private StreamQueries() {
-	}
+	private StreamQueries() {}
 }

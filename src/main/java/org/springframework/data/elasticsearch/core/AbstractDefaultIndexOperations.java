@@ -17,32 +17,33 @@ package org.springframework.data.elasticsearch.core;
 
 import static org.springframework.util.StringUtils.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
-import org.elasticsearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.elasticsearch.cluster.metadata.AliasMetaData;
-import org.elasticsearch.common.collect.MapBuilder;
-import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.cluster.metadata.AliasMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
-import org.springframework.data.elasticsearch.ElasticsearchException;
+import org.springframework.data.elasticsearch.UncategorizedElasticsearchException;
 import org.springframework.data.elasticsearch.annotations.Mapping;
 import org.springframework.data.elasticsearch.annotations.Setting;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
 import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.index.AliasData;
 import org.springframework.data.elasticsearch.core.index.MappingBuilder;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentEntity;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.AliasQuery;
 import org.springframework.lang.Nullable;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
  * Base implementation of {@link IndexOperations} common to Transport and Rest based Implementations of IndexOperations.
- * 
+ *
  * @author Peter-Josef Meisch
  * @author Sascha Woo
  * @since 4.0
@@ -55,20 +56,24 @@ abstract class AbstractDefaultIndexOperations implements IndexOperations {
 	protected final RequestFactory requestFactory;
 
 	@Nullable protected final Class<?> boundClass;
-	protected final IndexCoordinates boundIndex;
+	@Nullable private final IndexCoordinates boundIndex;
 
 	public AbstractDefaultIndexOperations(ElasticsearchConverter elasticsearchConverter, Class<?> boundClass) {
+
+		Assert.notNull(boundClass, "boundClass may not be null");
+
 		this.elasticsearchConverter = elasticsearchConverter;
 		requestFactory = new RequestFactory(elasticsearchConverter);
-
 		this.boundClass = boundClass;
-		this.boundIndex = getIndexCoordinatesFor(boundClass);
+		this.boundIndex = null;
 	}
 
 	public AbstractDefaultIndexOperations(ElasticsearchConverter elasticsearchConverter, IndexCoordinates boundIndex) {
+
+		Assert.notNull(boundIndex, "boundIndex may not be null");
+
 		this.elasticsearchConverter = elasticsearchConverter;
 		requestFactory = new RequestFactory(elasticsearchConverter);
-
 		this.boundClass = null;
 		this.boundIndex = boundIndex;
 	}
@@ -85,59 +90,66 @@ abstract class AbstractDefaultIndexOperations implements IndexOperations {
 	@Override
 	public boolean create() {
 
+		Document settings = null;
+
 		if (boundClass != null) {
-			Class<?> clazz = boundClass;
-			String indexName = boundIndex.getIndexName();
-
-			if (clazz.isAnnotationPresent(Setting.class)) {
-				String settingPath = clazz.getAnnotation(Setting.class).settingPath();
-
-				if (hasText(settingPath)) {
-					String settings = ResourceUtil.readFileFromClasspath(settingPath);
-
-					if (hasText(settings)) {
-						return doCreate(indexName, Document.parse(settings));
-					}
-				} else {
-					LOGGER.info("settingPath in @Setting has to be defined. Using default instead.");
-				}
-			}
-			return doCreate(indexName, getDefaultSettings(getRequiredPersistentEntity(clazz)));
+			settings = createSettings(boundClass);
 		}
-		return doCreate(boundIndex.getIndexName(), null);
+
+		return doCreate(getIndexCoordinates(), settings);
+	}
+
+	@Override
+	public Document createSettings(Class<?> clazz) {
+
+		Assert.notNull(clazz, "clazz must not be null");
+
+		Document settings = null;
+
+		Setting setting = AnnotatedElementUtils.findMergedAnnotation(clazz, Setting.class);
+
+		if (setting != null) {
+			settings = loadSettings(setting.settingPath());
+		}
+
+		if (settings == null) {
+			settings = getRequiredPersistentEntity(clazz).getDefaultSettings();
+		}
+
+		return settings;
 	}
 
 	@Override
 	public boolean create(Document settings) {
-		return doCreate(boundIndex.getIndexName(), settings);
+		return doCreate(getIndexCoordinates(), settings);
 	}
 
-	protected abstract boolean doCreate(String indexName, @Nullable Document settings);
+	protected abstract boolean doCreate(IndexCoordinates index, @Nullable Document settings);
 
 	@Override
 	public boolean delete() {
-		return doDelete(boundIndex.getIndexName());
+		return doDelete(getIndexCoordinates());
 	}
 
-	protected abstract boolean doDelete(String indexName);
+	protected abstract boolean doDelete(IndexCoordinates index);
 
 	@Override
 	public boolean exists() {
-		return doExists(boundIndex.getIndexName());
+		return doExists(getIndexCoordinates());
 	}
 
-	protected abstract boolean doExists(String indexName);
+	protected abstract boolean doExists(IndexCoordinates index);
 
 	@Override
 	public boolean putMapping(Document mapping) {
-		return doPutMapping(boundIndex, mapping);
+		return doPutMapping(getIndexCoordinates(), mapping);
 	}
 
 	protected abstract boolean doPutMapping(IndexCoordinates index, Document mapping);
 
 	@Override
 	public Map<String, Object> getMapping() {
-		return doGetMapping(boundIndex);
+		return doGetMapping(getIndexCoordinates());
 	}
 
 	abstract protected Map<String, Object> doGetMapping(IndexCoordinates index);
@@ -149,38 +161,57 @@ abstract class AbstractDefaultIndexOperations implements IndexOperations {
 
 	@Override
 	public Map<String, Object> getSettings(boolean includeDefaults) {
-		return doGetSettings(boundIndex.getIndexName(), includeDefaults);
+		return doGetSettings(getIndexCoordinates(), includeDefaults);
 	}
 
-	protected abstract Map<String, Object> doGetSettings(String indexName, boolean includeDefaults);
+	protected abstract Map<String, Object> doGetSettings(IndexCoordinates index, boolean includeDefaults);
 
 	@Override
 	public void refresh() {
-		doRefresh(boundIndex);
+		doRefresh(getIndexCoordinates());
 	}
 
 	protected abstract void doRefresh(IndexCoordinates indexCoordinates);
 
 	@Override
 	public boolean addAlias(AliasQuery query) {
-		return doAddAlias(query, boundIndex);
+		return doAddAlias(query, getIndexCoordinates());
 	}
 
 	protected abstract boolean doAddAlias(AliasQuery query, IndexCoordinates index);
 
 	@Override
-	public List<AliasMetaData> queryForAlias() {
-		return doQueryForAlias(boundIndex.getIndexName());
+	public List<AliasMetadata> queryForAlias() {
+		return doQueryForAlias(getIndexCoordinates());
 	}
 
-	protected abstract List<AliasMetaData> doQueryForAlias(String indexName);
+	protected abstract List<AliasMetadata> doQueryForAlias(IndexCoordinates index);
 
 	@Override
 	public boolean removeAlias(AliasQuery query) {
-		return doRemoveAlias(query, boundIndex);
+		return doRemoveAlias(query, getIndexCoordinates());
 	}
 
 	protected abstract boolean doRemoveAlias(AliasQuery query, IndexCoordinates index);
+
+	@Override
+	public Map<String, Set<AliasData>> getAliases(String... aliasNames) {
+
+		Assert.notEmpty(aliasNames, "aliasNames must not be empty");
+
+		return doGetAliases(aliasNames, null);
+	}
+
+	@Override
+	public Map<String, Set<AliasData>> getAliasesForIndex(String... indexNames) {
+
+		Assert.notEmpty(indexNames, "indexNames must not be empty");
+
+		return doGetAliases(null, indexNames);
+	}
+
+	protected abstract Map<String, Set<AliasData>> doGetAliases(@Nullable String[] aliasNames,
+			@Nullable String[] indexNames);
 
 	@Override
 	public Document createMapping() {
@@ -195,13 +226,14 @@ abstract class AbstractDefaultIndexOperations implements IndexOperations {
 	protected Document buildMapping(Class<?> clazz) {
 
 		// load mapping specified in Mapping annotation if present
-		if (clazz.isAnnotationPresent(Mapping.class)) {
-			String mappingPath = clazz.getAnnotation(Mapping.class).mappingPath();
+		Mapping mappingAnnotation = AnnotatedElementUtils.findMergedAnnotation(clazz, Mapping.class);
+		if (mappingAnnotation != null) {
+			String mappingPath = mappingAnnotation.mappingPath();
 
-			if (!StringUtils.isEmpty(mappingPath)) {
+			if (StringUtils.hasText(mappingPath)) {
 				String mappings = ResourceUtil.readFileFromClasspath(mappingPath);
 
-				if (!StringUtils.isEmpty(mappings)) {
+				if (StringUtils.hasText(mappings)) {
 					return Document.parse(mappings);
 				}
 			} else {
@@ -210,58 +242,49 @@ abstract class AbstractDefaultIndexOperations implements IndexOperations {
 		}
 
 		// build mapping from field annotations
-		try {
+		try
+
+		{
 			String mapping = new MappingBuilder(elasticsearchConverter).buildPropertyMapping(clazz);
 			return Document.parse(mapping);
 		} catch (Exception e) {
-			throw new ElasticsearchException("Failed to build mapping for " + clazz.getSimpleName(), e);
+			throw new UncategorizedElasticsearchException("Failed to build mapping for " + clazz.getSimpleName(), e);
 		}
 	}
+
+	@Override
+	public Document createSettings() {
+		return createSettings(checkForBoundClass());
+	}
+
 	// endregion
 
 	// region Helper functions
-	private <T> Document getDefaultSettings(ElasticsearchPersistentEntity<T> persistentEntity) {
-
-		if (persistentEntity.isUseServerConfiguration()) {
-			return Document.create();
-		}
-
-		Map<String, String> map = new MapBuilder<String, String>()
-				.put("index.number_of_shards", String.valueOf(persistentEntity.getShards()))
-				.put("index.number_of_replicas", String.valueOf(persistentEntity.getReplicas()))
-				.put("index.refresh_interval", persistentEntity.getRefreshInterval())
-				.put("index.store.type", persistentEntity.getIndexStoreType()).map();
-		return Document.from(map);
-	}
-
 	ElasticsearchPersistentEntity<?> getRequiredPersistentEntity(Class<?> clazz) {
 		return elasticsearchConverter.getMappingContext().getRequiredPersistentEntity(clazz);
+	}
+
+	@Override
+	public IndexCoordinates getIndexCoordinates() {
+		return (boundClass != null) ? getIndexCoordinatesFor(boundClass) : Objects.requireNonNull(boundIndex);
 	}
 
 	public IndexCoordinates getIndexCoordinatesFor(Class<?> clazz) {
 		return getRequiredPersistentEntity(clazz).getIndexCoordinates();
 	}
 
-	protected Map<String, Object> convertSettingsResponseToMap(GetSettingsResponse response, String indexName) {
+	@Nullable
+	private Document loadSettings(String settingPath) {
+		if (hasText(settingPath)) {
+			String settingsFile = ResourceUtil.readFileFromClasspath(settingPath);
 
-		Map<String, Object> settings = new HashMap<>();
-
-		if (!response.getIndexToDefaultSettings().isEmpty()) {
-			Settings defaultSettings = response.getIndexToDefaultSettings().get(indexName);
-			for (String key : defaultSettings.keySet()) {
-				settings.put(key, defaultSettings.get(key));
+			if (hasText(settingsFile)) {
+				return Document.parse(settingsFile);
 			}
+		} else {
+			LOGGER.info("settingPath in @Setting has to be defined. Using default instead.");
 		}
-
-		if (!response.getIndexToSettings().isEmpty()) {
-			Settings customSettings = response.getIndexToSettings().get(indexName);
-			for (String key : customSettings.keySet()) {
-				settings.put(key, customSettings.get(key));
-			}
-		}
-
-		return settings;
+		return null;
 	}
 	// endregion
-
 }

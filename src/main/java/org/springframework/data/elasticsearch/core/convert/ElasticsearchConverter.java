@@ -15,20 +15,12 @@
  */
 package org.springframework.data.elasticsearch.core.convert;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import org.springframework.data.convert.EntityConverter;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
 import org.springframework.data.elasticsearch.core.document.Document;
-import org.springframework.data.elasticsearch.core.document.SearchDocument;
-import org.springframework.data.elasticsearch.core.document.SearchDocumentResponse;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentEntity;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentProperty;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
+import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.data.projection.ProjectionFactory;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.springframework.lang.Nullable;
@@ -39,6 +31,8 @@ import org.springframework.util.Assert;
  * @author Mohsin Husen
  * @author Christoph Strobl
  * @author Peter-Josef Meisch
+ * @author Sasch Woo
+ * @author Roman Puchkovskiy
  */
 public interface ElasticsearchConverter
 		extends EntityConverter<ElasticsearchPersistentEntity<?>, ElasticsearchPersistentProperty, Object, Document> {
@@ -52,59 +46,6 @@ public interface ElasticsearchConverter
 	default ProjectionFactory getProjectionFactory() {
 		return new SpelAwareProxyProjectionFactory();
 	}
-
-	// region read
-	/**
-	 * Map a single {@link Document} to an instance of the given type.
-	 *
-	 * @param document the document to map
-	 * @param type must not be {@literal null}.
-	 * @param <T> the class of type
-	 * @return can be {@literal null} if the document is null or {@link Document#isEmpty()} is true.
-	 * @since 4.0
-	 */
-	@Nullable
-	<T> T mapDocument(@Nullable Document document, Class<T> type);
-
-	/**
-	 * Map a list of {@link Document}s to a list of instance of the given type.
-	 *
-	 * @param documents must not be {@literal null}.
-	 * @param type must not be {@literal null}.
-	 * @param <T> the class of type
-	 * @return a list obtained by calling {@link #mapDocument(Document, Class)} on the elements of the list.
-	 * @since 4.0
-	 */
-	default <T> List<T> mapDocuments(List<Document> documents, Class<T> type) {
-		return documents.stream().map(document -> mapDocument(document, type)).collect(Collectors.toList());
-	}
-
-	/**
-	 * builds a {@link SearchHits} from a {@link SearchDocumentResponse}.
-	 * 
-	 * @param <T> the clazz of the type, must not be {@literal null}.
-	 * @param type the type of the returned data, must not be {@literal null}.
-	 * @param searchDocumentResponse the response to read from, must not be {@literal null}.
-	 * @return a SearchHits object
-	 * @since 4.0
-	 */
-	<T> SearchHits<T> read(Class<T> type, SearchDocumentResponse searchDocumentResponse);
-
-	/**
-	 * builds a {@link SearchHit} from a {@link SearchDocument}.
-	 *
-	 * @param <T> the clazz of the type, must not be {@literal null}.
-	 * @param type the type of the returned data, must not be {@literal null}.
-	 * @param searchDocument must not be {@literal null}
-	 * @return SearchHit with all available information filled in
-	 * @since 4.0
-	 */
-	<T> SearchHit<T> read(Class<T> type, SearchDocument searchDocument);
-
-	<T> AggregatedPage<SearchHit<T>> mapResults(SearchDocumentResponse response, Class<T> clazz,
-			@Nullable Pageable pageable);
-
-	// endregion
 
 	// region write
 	/**
@@ -133,21 +74,44 @@ public interface ElasticsearchConverter
 	 * @return will not be {@literal null}.
 	 */
 	default Document mapObject(@Nullable Object source) {
+
 		Document target = Document.create();
-		write(source, target);
+
+		if (source != null) {
+			write(source, target);
+		}
 		return target;
 	}
 	// endregion
 
+	// region query
 	/**
 	 * Updates a query by renaming the property names in the query to the correct mapped field names and the values to the
 	 * converted values if the {@link ElasticsearchPersistentProperty} for a property has a
-	 * {@link org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentPropertyConverter}.
+	 * {@link org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentPropertyConverter}. If
+	 * domainClass is null, it's a noop; handling null here eliminates null checks in the caller.
 	 * 
+	 * @param query the query that is internally updated
+	 * @param domainClass the class of the object that is searched with the query
+	 */
+	default void updateQuery(Query query, @Nullable Class<?> domainClass) {
+
+		if (domainClass != null) {
+
+			if (query instanceof CriteriaQuery) {
+				updateCriteriaQuery((CriteriaQuery) query, domainClass);
+			}
+		}
+	}
+
+	/**
+	 * Updates a {@link CriteriaQuery} by renaming the property names in the query to the correct mapped field names and
+	 * the values to the converted values if the {@link ElasticsearchPersistentProperty} for a property has a
+	 * {@link org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentPropertyConverter}.
+	 *
 	 * @param criteriaQuery the query that is internally updated
 	 * @param domainClass the class of the object that is searched with the query
 	 */
-	// region query
-	void updateQuery(CriteriaQuery criteriaQuery, Class<?> domainClass);
+	void updateCriteriaQuery(CriteriaQuery criteriaQuery, Class<?> domainClass);
 	// endregion
 }

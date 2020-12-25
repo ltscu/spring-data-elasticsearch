@@ -41,6 +41,7 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.annotations.InnerField;
 import org.springframework.data.elasticsearch.annotations.MultiField;
+import org.springframework.data.elasticsearch.junit.jupiter.IntegrationTest;
 import org.springframework.lang.Nullable;
 
 /**
@@ -49,6 +50,7 @@ import org.springframework.lang.Nullable;
  * @author Christoph Strobl
  * @author Peter-Josef Meisch
  */
+@IntegrationTest
 public class CdiRepositoryTests {
 
 	@Nullable private static CdiTestContainer cdiContainer;

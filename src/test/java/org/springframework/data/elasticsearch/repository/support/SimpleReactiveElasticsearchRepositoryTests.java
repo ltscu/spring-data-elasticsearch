@@ -27,22 +27,14 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.io.IOException;
 import java.lang.Boolean;
 import java.lang.Long;
-import java.lang.Object;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.IntStream;
 
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,90 +48,92 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Order;
-import org.springframework.data.elasticsearch.TestUtils;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.Highlight;
 import org.springframework.data.elasticsearch.annotations.HighlightField;
 import org.springframework.data.elasticsearch.annotations.Query;
-import org.springframework.data.elasticsearch.annotations.Score;
-import org.springframework.data.elasticsearch.client.reactive.ReactiveElasticsearchClient;
-import org.springframework.data.elasticsearch.config.AbstractReactiveElasticsearchConfiguration;
+import org.springframework.data.elasticsearch.core.ReactiveElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.junit.jupiter.ElasticsearchRestTemplateConfiguration;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.junit.jupiter.ReactiveElasticsearchRestTemplateConfiguration;
 import org.springframework.data.elasticsearch.junit.jupiter.SpringIntegrationTest;
 import org.springframework.data.elasticsearch.repository.config.EnableReactiveElasticsearchRepositories;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.util.StringUtils;
 
 /**
  * @author Christoph Strobl
  * @author Peter-Josef Meisch
+ * @author Jens Schauder
  */
 @SpringIntegrationTest
 @ContextConfiguration(classes = { SimpleReactiveElasticsearchRepositoryTests.Config.class })
-public class SimpleReactiveElasticsearchRepositoryTests {
+class SimpleReactiveElasticsearchRepositoryTests {
 
 	@Configuration
-	@Import({ ElasticsearchRestTemplateConfiguration.class })
+	@Import({ ReactiveElasticsearchRestTemplateConfiguration.class })
 	@EnableReactiveElasticsearchRepositories(considerNestedRepositories = true)
-	static class Config extends AbstractReactiveElasticsearchConfiguration {
-
-		@Override
-		public ReactiveElasticsearchClient reactiveElasticsearchClient() {
-			return TestUtils.reactiveClient();
-		}
-	}
+	static class Config {}
 
 	static final String INDEX = "test-index-sample-simple-reactive";
-	static final String TYPE = "test-type";
 
-	@Autowired ReactiveSampleEntityRepository repository;
+	@Autowired ReactiveElasticsearchOperations operations;
+	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection") @Autowired ReactiveSampleEntityRepository repository;
 
 	@BeforeEach
-	public void setUp() {
-		TestUtils.deleteIndex(INDEX);
+	void setUp() {
+		operations.indexOps(IndexCoordinates.of(INDEX)).delete().block();
 	}
 
 	@AfterEach
 	void after() {
-		TestUtils.deleteIndex(INDEX);
+		operations.indexOps(IndexCoordinates.of(INDEX)).delete().block();
 	}
 
 	@Test // DATAES-519
-	public void saveShouldSaveSingleEntity() {
+	void saveShouldSaveSingleEntity() {
 
 		repository.save(SampleEntity.builder().build()) //
+				.map(SampleEntity::getId) //
+				.flatMap(this::documentWithIdExistsInIndex) //
 				.as(StepVerifier::create) //
-				.consumeNextWith(it -> assertThat(TestUtils.documentWithId(it.getId()).existsIn(INDEX)).isTrue()) //
-				.verifyComplete();
+				.expectNext(true).verifyComplete();
+	}
+
+	private Mono<Boolean> documentWithIdExistsInIndex(String id) {
+		return operations.exists(id, IndexCoordinates.of(INDEX));
 	}
 
 	@Test // DATAES-519
-	public void saveShouldComputeMultipleEntities() {
+	void saveShouldComputeMultipleEntities() {
 
 		repository
 				.saveAll(Arrays.asList(SampleEntity.builder().build(), SampleEntity.builder().build(),
 						SampleEntity.builder().build())) //
+				.map(SampleEntity::getId) //
+				.flatMap(this::documentWithIdExistsInIndex) //
 				.as(StepVerifier::create) //
-				.consumeNextWith(it -> assertThat(TestUtils.documentWithId(it.getId()).existsIn(INDEX)).isTrue()) //
-				.consumeNextWith(it -> assertThat(TestUtils.documentWithId(it.getId()).existsIn(INDEX)).isTrue()) //
-				.consumeNextWith(it -> assertThat(TestUtils.documentWithId(it.getId()).existsIn(INDEX)).isTrue()) //
+				.expectNext(true) //
+				.expectNext(true) //
+				.expectNext(true) //
 				.verifyComplete();
 	}
 
-	@Test // DATAES-519
-	public void findByIdShouldCompleteIfIndexDoesNotExist() {
-		repository.findById("id-two").as(StepVerifier::create).verifyComplete();
+	@Test // DATAES-519, DATAES-767, DATAES-822
+	void findByIdShouldErrorIfIndexDoesNotExist() {
+		repository.findById("id-two") //
+				.as(StepVerifier::create) //
+				.expectError(ElasticsearchStatusException.class);
 	}
 
 	@Test // DATAES-519
-	public void findShouldRetrieveSingleEntityById() throws IOException {
+	void findShouldRetrieveSingleEntityById() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
 				SampleEntity.builder().id("id-two").build(), //
-				SampleEntity.builder().id("id-three").build());
+				SampleEntity.builder().id("id-three").build()) //
+						.block();
 
 		repository.findById("id-two").as(StepVerifier::create)//
 				.consumeNextWith(it -> assertThat(it.getId()).isEqualTo("id-two")) //
@@ -147,23 +141,25 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void findByIdShouldCompleteIfNothingFound() throws IOException {
+	void findByIdShouldCompleteIfNothingFound() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
 				SampleEntity.builder().id("id-two").build(), //
-				SampleEntity.builder().id("id-three").build());
+				SampleEntity.builder().id("id-three").build()) //
+						.block();
 
 		repository.findById("does-not-exist").as(StepVerifier::create) //
 				.verifyComplete();
 	}
 
 	@Test // DATAES-720
-	public void findAllShouldReturnAllElements() throws IOException {
+	void findAllShouldReturnAllElements() {
 		// make sure to be above the default page size of the Query interface
 		int count = DEFAULT_PAGE_SIZE * 2;
 		bulkIndex(IntStream.range(1, count + 1) //
 				.mapToObj(it -> SampleEntity.builder().id(String.valueOf(it)).build()) //
-				.toArray(SampleEntity[]::new));
+				.toArray(SampleEntity[]::new)) //
+						.block();
 
 		repository.findAll() //
 				.as(StepVerifier::create) //
@@ -172,16 +168,17 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void findAllByIdByIdShouldCompleteIfIndexDoesNotExist() {
+	void findAllByIdByIdShouldCompleteIfIndexDoesNotExist() {
 		repository.findAllById(Arrays.asList("id-two", "id-two")).as(StepVerifier::create).verifyComplete();
 	}
 
 	@Test // DATAES-519
-	public void findAllByIdShouldRetrieveMatchingDocuments() throws IOException {
+	void findAllByIdShouldRetrieveMatchingDocuments() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
 				SampleEntity.builder().id("id-two").build(), //
-				SampleEntity.builder().id("id-three").build());
+				SampleEntity.builder().id("id-three").build()) //
+						.block();
 
 		repository.findAllById(Arrays.asList("id-one", "id-two")) //
 				.as(StepVerifier::create)//
@@ -191,11 +188,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void findAllByIdShouldCompleteWhenNothingFound() throws IOException {
+	void findAllByIdShouldCompleteWhenNothingFound() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
 				SampleEntity.builder().id("id-two").build(), //
-				SampleEntity.builder().id("id-three").build());
+				SampleEntity.builder().id("id-three").build()) //
+						.block();
 
 		repository.findAllById(Arrays.asList("can't", "touch", "this")) //
 				.as(StepVerifier::create)//
@@ -203,11 +201,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-717
-	void shouldReturnFluxOfSearchHit() throws IOException {
+	void shouldReturnFluxOfSearchHit() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("message").build(), //
-				SampleEntity.builder().id("id-three").message("message").build());
+				SampleEntity.builder().id("id-three").message("message").build()) //
+						.block();
 
 		repository.queryAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -217,11 +216,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-717
-	void shouldReturnFluxOfSearchHitForStringQuery() throws IOException {
+	void shouldReturnFluxOfSearchHitForStringQuery() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("message").build(), //
-				SampleEntity.builder().id("id-three").message("message").build());
+				SampleEntity.builder().id("id-three").message("message").build()) //
+						.block();
 
 		repository.queryByMessageWithString("message") //
 				.as(StepVerifier::create) //
@@ -231,11 +231,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-372
-	void shouldReturnHighlightsOnAnnotatedMethod() throws IOException {
+	void shouldReturnHighlightsOnAnnotatedMethod() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("message").build(), //
-				SampleEntity.builder().id("id-three").message("message").build());
+				SampleEntity.builder().id("id-three").message("message").build()) //
+						.block();
 
 		repository.queryAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -248,11 +249,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-372
-	void shouldReturnHighlightsOnAnnotatedStringQueryMethod() throws IOException {
+	void shouldReturnHighlightsOnAnnotatedStringQueryMethod() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("message").build(), //
-				SampleEntity.builder().id("id-three").message("message").build());
+				SampleEntity.builder().id("id-three").message("message").build()) //
+						.block();
 
 		repository.queryByMessageWithString("message") //
 				.as(StepVerifier::create) //
@@ -264,26 +266,30 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 				.verifyComplete();
 	}
 
-	@Test // DATAES-519
-	public void countShouldReturnZeroWhenIndexDoesNotExist() {
-		repository.count().as(StepVerifier::create).expectNext(0L).verifyComplete();
+	@Test // DATAES-519, DATAES-767, DATAES-822
+	void countShouldErrorWhenIndexDoesNotExist() {
+		repository.count() //
+				.as(StepVerifier::create) //
+				.expectError(ElasticsearchStatusException.class);
 	}
 
 	@Test // DATAES-519
-	public void countShouldCountDocuments() throws IOException {
+	void countShouldCountDocuments() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
-				SampleEntity.builder().id("id-two").build());
+				SampleEntity.builder().id("id-two").build()) //
+						.block();
 
 		repository.count().as(StepVerifier::create).expectNext(2L).verifyComplete();
 	}
 
 	@Test // DATAES-519
-	public void existsByIdShouldReturnTrueIfExists() throws IOException {
+	void existsByIdShouldReturnTrueIfExists() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.existsById("id-two") //
 				.as(StepVerifier::create) //
@@ -292,11 +298,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void existsByIdShouldReturnFalseIfNotExists() throws IOException {
+	void existsByIdShouldReturnFalseIfNotExists() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.existsById("wrecking ball") //
 				.as(StepVerifier::create) //
@@ -305,11 +312,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void countShouldCountMatchingDocuments() throws IOException {
+	void countShouldCountMatchingDocuments() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.countAllByMessage("test") //
 				.as(StepVerifier::create) //
@@ -318,11 +326,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void existsShouldReturnTrueIfExists() throws IOException {
+	void existsShouldReturnTrueIfExists() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.existsAllByMessage("message") //
 				.as(StepVerifier::create) //
@@ -331,11 +340,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void existsShouldReturnFalseIfNotExists() throws IOException {
+	void existsShouldReturnFalseIfNotExists() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.existsAllByMessage("these days") //
 				.as(StepVerifier::create) //
@@ -344,75 +354,98 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void deleteByIdShouldCompleteIfNothingDeleted() throws IOException {
+	void deleteByIdShouldCompleteIfNothingDeleted() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
-				SampleEntity.builder().id("id-two").build());
+				SampleEntity.builder().id("id-two").build()) //
+						.block();
 
 		repository.deleteById("does-not-exist").as(StepVerifier::create).verifyComplete();
 	}
 
-	@Test // DATAES-519
-	public void deleteByIdShouldCompleteWhenIndexDoesNotExist() {
-		repository.deleteById("does-not-exist").as(StepVerifier::create).verifyComplete();
+	@Test // DATAES-519, DATAES-767, DATAES-822, DATAES-678
+	void deleteByIdShouldCompleteWhenIndexDoesNotExist() {
+		repository.deleteById("does-not-exist") //
+				.as(StepVerifier::create) //
+				.verifyComplete();
 	}
 
 	@Test // DATAES-519
-	public void deleteByIdShouldDeleteEntry() throws IOException {
+	void deleteByIdShouldDeleteEntry() {
 
 		SampleEntity toBeDeleted = SampleEntity.builder().id("id-two").build();
-		bulkIndex(SampleEntity.builder().id("id-one").build(), toBeDeleted);
+		bulkIndex(SampleEntity.builder().id("id-one").build(), toBeDeleted) //
+				.block();
 
 		repository.deleteById(toBeDeleted.getId()).as(StepVerifier::create).verifyComplete();
 
-		assertThat(TestUtils.documentWithId(toBeDeleted.getId()).ofType(TYPE).existsIn(INDEX)).isFalse();
+		assertThat(documentWithIdExistsInIndex(toBeDeleted.getId()).block()).isFalse();
+	}
+
+	@Test // DATAES-976
+	void deleteAllByIdShouldDeleteEntry() {
+
+		SampleEntity toBeDeleted = SampleEntity.builder().id("id-two").build();
+		bulkIndex(SampleEntity.builder().id("id-one").build(), toBeDeleted) //
+				.block();
+
+		repository.deleteAllById(Collections.singletonList(toBeDeleted.getId())).as(StepVerifier::create).verifyComplete();
+
+		assertThat(documentWithIdExistsInIndex(toBeDeleted.getId()).block()).isFalse();
 	}
 
 	@Test // DATAES-519
-	public void deleteShouldDeleteEntry() throws IOException {
+	void deleteShouldDeleteEntry() {
 
 		SampleEntity toBeDeleted = SampleEntity.builder().id("id-two").build();
-		bulkIndex(SampleEntity.builder().id("id-one").build(), toBeDeleted);
+		bulkIndex(SampleEntity.builder().id("id-one").build(), toBeDeleted) //
+				.block();
 
 		repository.delete(toBeDeleted).as(StepVerifier::create).verifyComplete();
 
-		assertThat(TestUtils.documentWithId(toBeDeleted.getId()).ofType(TYPE).existsIn(INDEX)).isFalse();
+		assertThat(documentWithIdExistsInIndex(toBeDeleted.getId()).block()).isFalse();
 	}
 
 	@Test // DATAES-519
-	public void deleteAllShouldDeleteGivenEntries() throws IOException {
+	void deleteAllShouldDeleteGivenEntries() {
 
 		SampleEntity toBeDeleted = SampleEntity.builder().id("id-one").build();
 		SampleEntity hangInThere = SampleEntity.builder().id("id-two").build();
 		SampleEntity toBeDeleted2 = SampleEntity.builder().id("id-three").build();
 
-		bulkIndex(toBeDeleted, hangInThere, toBeDeleted2);
+		bulkIndex(toBeDeleted, hangInThere, toBeDeleted2) //
+				.block();
 
 		repository.deleteAll(Arrays.asList(toBeDeleted, toBeDeleted2)).as(StepVerifier::create).verifyComplete();
 
-		assertThat(TestUtils.documentWithId(toBeDeleted.getId()).ofType(TYPE).existsIn(INDEX)).isFalse();
-		assertThat(TestUtils.documentWithId(toBeDeleted2.getId()).ofType(TYPE).existsIn(INDEX)).isFalse();
-		assertThat(TestUtils.documentWithId(hangInThere.getId()).ofType(TYPE).existsIn(INDEX)).isTrue();
+		assertThat(documentWithIdExistsInIndex(toBeDeleted.getId()).block()).isFalse();
+		assertThat(documentWithIdExistsInIndex(toBeDeleted2.getId()).block()).isFalse();
+		assertThat(documentWithIdExistsInIndex(hangInThere.getId()).block()).isTrue();
 	}
 
 	@Test // DATAES-519
-	public void deleteAllShouldDeleteAllEntries() throws IOException {
+	void deleteAllShouldDeleteAllEntries() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").build(), //
 				SampleEntity.builder().id("id-two").build(), //
-				SampleEntity.builder().id("id-three").build());
+				SampleEntity.builder().id("id-three").build()) //
+						.block();
 
 		repository.deleteAll().as(StepVerifier::create).verifyComplete();
 
-		assertThat(TestUtils.isEmptyIndex(INDEX)).isTrue();
+		repository.count() //
+				.as(StepVerifier::create) //
+				.expectNext(0L) //
+				.verifyComplete();
 	}
 
 	@Test // DATAES-519
-	public void derivedFinderMethodShouldBeExecutedCorrectly() throws IOException {
+	void derivedFinderMethodShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.findAllByMessageLike("test") //
 				.as(StepVerifier::create) //
@@ -421,11 +454,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void derivedFinderMethodShouldBeExecutedCorrectlyWhenGivenPublisher() throws IOException {
+	void derivedFinderMethodShouldBeExecutedCorrectlyWhenGivenPublisher() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.findAllByMessage(Mono.just("test")) //
 				.as(StepVerifier::create) //
@@ -434,11 +468,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void derivedFinderWithDerivedSortMethodShouldBeExecutedCorrectly() throws IOException {
+	void derivedFinderWithDerivedSortMethodShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("test").rate(3).build(), //
 				SampleEntity.builder().id("id-two").message("test test").rate(1).build(), //
-				SampleEntity.builder().id("id-three").message("test test").rate(2).build());
+				SampleEntity.builder().id("id-three").message("test test").rate(2).build()) //
+						.block();
 
 		repository.findAllByMessageLikeOrderByRate("test") //
 				.as(StepVerifier::create) //
@@ -449,11 +484,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void derivedFinderMethodWithSortParameterShouldBeExecutedCorrectly() throws IOException {
+	void derivedFinderMethodWithSortParameterShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("test").rate(3).build(), //
 				SampleEntity.builder().id("id-two").message("test test").rate(1).build(), //
-				SampleEntity.builder().id("id-three").message("test test").rate(2).build());
+				SampleEntity.builder().id("id-three").message("test test").rate(2).build()) //
+						.block();
 
 		repository.findAllByMessage("test", Sort.by(Order.asc("rate"))) //
 				.as(StepVerifier::create) //
@@ -464,11 +500,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void derivedFinderMethodWithPageableParameterShouldBeExecutedCorrectly() throws IOException {
+	void derivedFinderMethodWithPageableParameterShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("test").rate(3).build(), //
 				SampleEntity.builder().id("id-two").message("test test").rate(1).build(), //
-				SampleEntity.builder().id("id-three").message("test test").rate(2).build());
+				SampleEntity.builder().id("id-three").message("test test").rate(2).build()) //
+						.block();
 
 		repository.findAllByMessage("test", PageRequest.of(0, 2, Sort.by(Order.asc("rate")))) //
 				.as(StepVerifier::create) //
@@ -478,11 +515,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void derivedFinderMethodReturningMonoShouldBeExecutedCorrectly() throws IOException {
+	void derivedFinderMethodReturningMonoShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.findFirstByMessageLike("test") //
 				.as(StepVerifier::create) //
@@ -491,11 +529,12 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void annotatedFinderMethodShouldBeExecutedCorrectly() throws IOException {
+	void annotatedFinderMethodShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.findAllViaAnnotatedQueryByMessageLike("test") //
 				.as(StepVerifier::create) //
@@ -504,60 +543,25 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 	}
 
 	@Test // DATAES-519
-	public void derivedDeleteMethodShouldBeExecutedCorrectly() throws IOException {
+	void derivedDeleteMethodShouldBeExecutedCorrectly() {
 
 		bulkIndex(SampleEntity.builder().id("id-one").message("message").build(), //
 				SampleEntity.builder().id("id-two").message("test message").build(), //
-				SampleEntity.builder().id("id-three").message("test test").build());
+				SampleEntity.builder().id("id-three").message("test test").build()) //
+						.block();
 
 		repository.deleteAllByMessage("message") //
 				.as(StepVerifier::create) //
 				.expectNext(2L) //
 				.verifyComplete();
 
-		assertThat(TestUtils.documentWithId("id-one").ofType(TYPE).existsIn(INDEX)).isFalse();
-		assertThat(TestUtils.documentWithId("id-two").ofType(TYPE).existsIn(INDEX)).isFalse();
-		assertThat(TestUtils.documentWithId("id-three").ofType(TYPE).existsIn(INDEX)).isTrue();
+		assertThat(documentWithIdExistsInIndex("id-one").block()).isFalse();
+		assertThat(documentWithIdExistsInIndex("id-two").block()).isFalse();
+		assertThat(documentWithIdExistsInIndex("id-three").block()).isTrue();
 	}
 
-	private IndexRequest indexRequest(Map<String, ?> source, String index) {
-
-		return new IndexRequest(index) //
-				.id(source.containsKey("id") ? source.get("id").toString() : UUID.randomUUID().toString()) //
-				.source(source) //
-				.create(true);
-	}
-
-	private IndexRequest indexRequestFrom(SampleEntity entity) {
-
-		Map<String, Object> target = new LinkedHashMap<>();
-
-		if (StringUtils.hasText(entity.getId())) {
-			target.put("id", entity.getId());
-		}
-
-		if (StringUtils.hasText(entity.getType())) {
-			target.put("type", entity.getType());
-		}
-
-		if (StringUtils.hasText(entity.getMessage())) {
-			target.put("message", entity.getMessage());
-		}
-
-		target.put("rate", entity.getRate());
-		target.put("available", entity.isAvailable());
-
-		return indexRequest(target, INDEX);
-	}
-
-	void bulkIndex(SampleEntity... entities) throws IOException {
-
-		BulkRequest request = new BulkRequest();
-		Arrays.stream(entities).forEach(it -> request.add(indexRequestFrom(it)));
-
-		try (RestHighLevelClient client = TestUtils.restHighLevelClient()) {
-			client.bulk(request.setRefreshPolicy(RefreshPolicy.IMMEDIATE), RequestOptions.DEFAULT);
-		}
+	Mono<Void> bulkIndex(SampleEntity... entities) {
+		return operations.saveAll(Arrays.asList(entities), IndexCoordinates.of(INDEX)).then();
 	}
 
 	interface ReactiveSampleEntityRepository extends ReactiveCrudRepository<SampleEntity, String> {
@@ -610,7 +614,6 @@ public class SimpleReactiveElasticsearchRepositoryTests {
 		private int rate;
 		private boolean available;
 		@Version private Long version;
-		@Score private float score;
 
 	}
 }

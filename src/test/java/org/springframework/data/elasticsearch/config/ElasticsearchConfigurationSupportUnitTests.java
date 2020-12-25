@@ -18,11 +18,17 @@ package org.springframework.data.elasticsearch.config;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import org.springframework.context.annotation.Bean;
+import reactor.core.publisher.Mono;
+
 import java.util.Collection;
 import java.util.Collections;
 
 import org.apache.commons.lang.ClassUtils;
+import org.elasticsearch.Version;
+import org.elasticsearch.action.main.MainResponse;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.cluster.ClusterName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
@@ -109,8 +115,12 @@ public class ElasticsearchConfigurationSupportUnitTests {
 	static class ReactiveRestConfig extends AbstractReactiveElasticsearchConfiguration {
 
 		@Override
+		@Bean
 		public ReactiveElasticsearchClient reactiveElasticsearchClient() {
-			return mock(ReactiveElasticsearchClient.class);
+			ReactiveElasticsearchClient client = mock(ReactiveElasticsearchClient.class);
+			when(client.info()).thenReturn(Mono
+					.just(new MainResponse("mockNodename", Version.CURRENT, new ClusterName("mockCluster"), "mockUuid", null)));
+			return client;
 		}
 	}
 

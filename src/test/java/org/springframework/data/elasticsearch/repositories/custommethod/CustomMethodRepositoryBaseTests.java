@@ -15,9 +15,9 @@
  */
 package org.springframework.data.elasticsearch.repositories.custommethod;
 
-import static org.apache.commons.lang.RandomStringUtils.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.data.elasticsearch.annotations.FieldType.*;
+import static org.springframework.data.elasticsearch.utils.IdGenerator.*;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -100,7 +100,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethod() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -119,7 +119,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForNot() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("some");
@@ -137,7 +137,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithQuery() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -157,7 +157,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithLessThan() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -165,7 +165,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		sampleEntity.setMessage("some message");
 		repository.save(sampleEntity);
 
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -185,7 +185,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithBefore() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -205,7 +205,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithAfter() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -225,7 +225,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithLike() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -245,7 +245,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForStartingWith() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -265,7 +265,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForEndingWith() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -285,7 +285,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForContains() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -305,7 +305,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForIn() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -313,7 +313,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -334,7 +334,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForNotIn() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -342,7 +342,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -360,16 +360,16 @@ public abstract class CustomMethodRepositoryBaseTests {
 	}
 
 	@Test // DATAES-647
-	public void shouldHandleManyValuesQueryingIn() {
+	public void shouldHandleManyKeywordValuesQueryingIn() {
 
 		// given
-		String documentId1 = randomNumeric(32);
+		String documentId1 = nextIdAsString();
 		SampleEntity sampleEntity1 = new SampleEntity();
 		sampleEntity1.setId(documentId1);
 		sampleEntity1.setKeyword("foo");
 		repository.save(sampleEntity1);
 
-		String documentId2 = randomNumeric(32);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setKeyword("bar");
@@ -378,8 +378,9 @@ public abstract class CustomMethodRepositoryBaseTests {
 		List<String> keywords = new ArrayList<>();
 		keywords.add("foo");
 
-		for (int i = 0; i < 1025; i++) {
-			keywords.add(randomNumeric(32));
+		// limit for normal query clauses is 1024, for keywords we change to terms queries
+		for (int i = 0; i < 1200; i++) {
+			keywords.add(nextIdAsString());
 		}
 
 		// when
@@ -391,16 +392,16 @@ public abstract class CustomMethodRepositoryBaseTests {
 	}
 
 	@Test // DATAES-647
-	public void shouldHandleManyValuesQueryingNotIn() {
+	public void shouldHandleManyKeywordValuesQueryingNotIn() {
 
 		// given
-		String documentId1 = randomNumeric(32);
+		String documentId1 = nextIdAsString();
 		SampleEntity sampleEntity1 = new SampleEntity();
 		sampleEntity1.setId(documentId1);
 		sampleEntity1.setKeyword("foo");
 		repository.save(sampleEntity1);
 
-		String documentId2 = randomNumeric(32);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setKeyword("bar");
@@ -409,8 +410,9 @@ public abstract class CustomMethodRepositoryBaseTests {
 		List<String> keywords = new ArrayList<>();
 		keywords.add("foo");
 
-		for (int i = 0; i < 1025; i++) {
-			keywords.add(randomNumeric(32));
+		// limit for normal query clauses is 1024, for keywords we change to terms queries
+		for (int i = 0; i < 1200; i++) {
+			keywords.add(nextIdAsString());
 		}
 
 		// when
@@ -421,11 +423,51 @@ public abstract class CustomMethodRepositoryBaseTests {
 		assertThat(list.get(0).getId()).isEqualTo(documentId2);
 	}
 
+	@Test // DATAES-912
+	void shouldHandleTextFieldQueryingIn() {
+		String documentId1 = nextIdAsString();
+		SampleEntity sampleEntity1 = new SampleEntity();
+		sampleEntity1.setId(documentId1);
+		sampleEntity1.setMessage("foo");
+		repository.save(sampleEntity1);
+
+		String documentId2 = nextIdAsString();
+		SampleEntity sampleEntity2 = new SampleEntity();
+		sampleEntity2.setId(documentId2);
+		sampleEntity2.setMessage("bar");
+		repository.save(sampleEntity2);
+
+		List<SampleEntity> list = repository.findByMessageIn(Arrays.asList("Foo", "Bar"));
+
+		assertThat(list).hasSize(2);
+		assertThat(list.stream().map(SampleEntity::getId)).containsExactlyInAnyOrder(documentId1, documentId2);
+	}
+
+	@Test // DATAES-912
+	void shouldHandleTextFieldQueryingNotIn() {
+		String documentId1 = nextIdAsString();
+		SampleEntity sampleEntity1 = new SampleEntity();
+		sampleEntity1.setId(documentId1);
+		sampleEntity1.setMessage("foo");
+		repository.save(sampleEntity1);
+
+		String documentId2 = nextIdAsString();
+		SampleEntity sampleEntity2 = new SampleEntity();
+		sampleEntity2.setId(documentId2);
+		sampleEntity2.setMessage("bar");
+		repository.save(sampleEntity2);
+
+		List<SampleEntity> list = repository.findByMessageNotIn(Arrays.asList("Boo", "Bar"));
+
+		assertThat(list).hasSize(1);
+		assertThat(list.get(0).getId()).isEqualTo(documentId1);
+	}
+
 	@Test
 	public void shouldExecuteCustomMethodForTrue() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -434,7 +476,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -453,7 +495,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForFalse() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -462,7 +504,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -482,7 +524,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodForOrderBy() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("abc");
@@ -491,7 +533,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// document 2
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("xyz");
@@ -500,7 +542,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity2);
 
 		// document 3
-		String documentId3 = randomNumeric(5);
+		String documentId3 = nextIdAsString();
 		SampleEntity sampleEntity3 = new SampleEntity();
 		sampleEntity3.setId(documentId3);
 		sampleEntity3.setType("def");
@@ -520,7 +562,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithBooleanParameter() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -529,7 +571,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -543,6 +585,37 @@ public abstract class CustomMethodRepositoryBaseTests {
 		// then
 		assertThat(page).isNotNull();
 		assertThat(page.getTotalElements()).isEqualTo(1L);
+	}
+
+	@Test // DATAES-777
+	public void shouldReturnPageableInUnwrappedPageResult() {
+
+		// given
+		String documentId = nextIdAsString();
+		SampleEntity sampleEntity = new SampleEntity();
+		sampleEntity.setId(documentId);
+		sampleEntity.setType("test");
+		sampleEntity.setMessage("foo");
+		sampleEntity.setAvailable(true);
+		repository.save(sampleEntity);
+
+		// given
+		String documentId2 = nextIdAsString();
+		SampleEntity sampleEntity2 = new SampleEntity();
+		sampleEntity2.setId(documentId2);
+		sampleEntity2.setType("test");
+		sampleEntity2.setMessage("bar");
+		sampleEntity2.setAvailable(false);
+		repository.save(sampleEntity2);
+
+		// when
+		PageRequest pageable = PageRequest.of(0, 10);
+		Page<SampleEntity> page = repository.findByAvailable(false, pageable);
+
+		// then
+		assertThat(page).isNotNull();
+		assertThat(page.getTotalElements()).isEqualTo(1L);
+		assertThat(page.getPageable()).isSameAs(pageable);
 	}
 
 	@Test
@@ -570,21 +643,21 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldReturnPageableResultsWithGivenSortingOrder() {
 
 		// given
-		String documentId = random(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setMessage("abc");
 		sampleEntity.setVersion(System.currentTimeMillis());
 		repository.save(sampleEntity);
 
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setMessage("abd");
 		sampleEntity.setVersion(System.currentTimeMillis());
 		repository.save(sampleEntity2);
 
-		String documentId3 = randomNumeric(5);
+		String documentId3 = nextIdAsString();
 		SampleEntity sampleEntity3 = new SampleEntity();
 		sampleEntity3.setId(documentId3);
 		sampleEntity3.setMessage("abe");
@@ -604,21 +677,21 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldReturnListForMessage() {
 
 		// given
-		String documentId = random(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setMessage("abc");
 		sampleEntity.setVersion(System.currentTimeMillis());
 		repository.save(sampleEntity);
 
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setMessage("abd");
 		sampleEntity.setVersion(System.currentTimeMillis());
 		repository.save(sampleEntity2);
 
-		String documentId3 = randomNumeric(5);
+		String documentId3 = nextIdAsString();
 		SampleEntity sampleEntity3 = new SampleEntity();
 		sampleEntity3.setId(documentId3);
 		sampleEntity3.setMessage("abe");
@@ -636,7 +709,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithGeoPoint() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -658,7 +731,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithGeoPointAndString() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -668,7 +741,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -691,7 +764,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithWithinGeoPoint() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -714,7 +787,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithWithinPoint() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -725,7 +798,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// when
-		Page<SampleEntity> page = repository.findByLocationWithin(new Point(45.7806d, 3.0875d),
+		Page<SampleEntity> page = repository.findByLocationWithin(new Point(3.0875d, 45.7806d),
 				new Distance(2, Metrics.KILOMETERS), PageRequest.of(0, 10));
 
 		// then
@@ -737,7 +810,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithNearBox() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -747,7 +820,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test2");
@@ -765,7 +838,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		assertThat(pageAll.getTotalElements()).isEqualTo(2L);
 
 		// when
-		Page<SampleEntity> page = repository.findByLocationNear(new Box(new Point(46d, 3d), new Point(45d, 4d)),
+		Page<SampleEntity> page = repository.findByLocationNear(new Box(new Point(3d, 46d), new Point(4d, 45d)),
 				PageRequest.of(0, 10));
 
 		// then
@@ -777,7 +850,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldExecuteCustomMethodWithNearPointAndDistance() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -788,7 +861,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// when
-		Page<SampleEntity> page = repository.findByLocationNear(new Point(45.7806d, 3.0875d),
+		Page<SampleEntity> page = repository.findByLocationNear(new Point(3.0875d, 45.7806d),
 				new Distance(2, Metrics.KILOMETERS), PageRequest.of(0, 10));
 
 		// then
@@ -815,7 +888,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethod() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -823,7 +896,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test2");
@@ -842,7 +915,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForNot() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("some");
@@ -850,7 +923,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -869,7 +942,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithBooleanParameter() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -878,7 +951,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -897,7 +970,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithLessThan() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -905,7 +978,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		sampleEntity.setMessage("some message");
 		repository.save(sampleEntity);
 
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -924,7 +997,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithBefore() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -933,7 +1006,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -953,7 +1026,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithAfter() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -962,7 +1035,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -982,7 +1055,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithLike() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -991,7 +1064,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1011,7 +1084,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForStartingWith() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1020,7 +1093,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1040,7 +1113,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForEndingWith() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1049,7 +1122,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1069,7 +1142,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForContains() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1078,7 +1151,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1098,7 +1171,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForIn() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1106,7 +1179,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -1126,7 +1199,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForNotIn() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1134,7 +1207,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -1154,7 +1227,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForTrue() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1163,7 +1236,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -1181,7 +1254,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodForFalse() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1190,7 +1263,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity);
 
 		// given
-		String documentId2 = randomNumeric(5);
+		String documentId2 = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId2);
 		sampleEntity2.setType("test");
@@ -1209,7 +1282,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithWithinGeoPoint() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1219,7 +1292,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1240,7 +1313,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithWithinPoint() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1250,7 +1323,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1261,7 +1334,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity2);
 
 		// when
-		long count = repository.countByLocationWithin(new Point(45.7806d, 3.0875d), new Distance(2, Metrics.KILOMETERS));
+		long count = repository.countByLocationWithin(new Point(3.0875d, 45.7806d), new Distance(2, Metrics.KILOMETERS));
 
 		// then
 		assertThat(count).isEqualTo(1L);
@@ -1271,7 +1344,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithNearBox() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1281,7 +1354,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test2");
@@ -1292,7 +1365,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity2);
 
 		// when
-		long count = repository.countByLocationNear(new Box(new Point(46d, 3d), new Point(45d, 4d)));
+		long count = repository.countByLocationNear(new Box(new Point(3d, 46d), new Point(4d, 45d)));
 
 		// then
 		assertThat(count).isEqualTo(1L);
@@ -1302,7 +1375,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 	public void shouldCountCustomMethodWithNearPointAndDistance() {
 
 		// given
-		String documentId = randomNumeric(5);
+		String documentId = nextIdAsString();
 		SampleEntity sampleEntity = new SampleEntity();
 		sampleEntity.setId(documentId);
 		sampleEntity.setType("test");
@@ -1312,7 +1385,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 
 		repository.save(sampleEntity);
 
-		documentId = randomNumeric(5);
+		documentId = nextIdAsString();
 		SampleEntity sampleEntity2 = new SampleEntity();
 		sampleEntity2.setId(documentId);
 		sampleEntity2.setType("test");
@@ -1323,7 +1396,7 @@ public abstract class CustomMethodRepositoryBaseTests {
 		repository.save(sampleEntity2);
 
 		// when
-		long count = repository.countByLocationNear(new Point(45.7806d, 3.0875d), new Distance(2, Metrics.KILOMETERS));
+		long count = repository.countByLocationNear(new Point(3.0875d, 45.7806d), new Distance(2, Metrics.KILOMETERS));
 
 		// then
 		assertThat(count).isEqualTo(1L);
@@ -1513,6 +1586,28 @@ public abstract class CustomMethodRepositoryBaseTests {
 		return entities;
 	}
 
+	@Test // DATAES-891
+	void shouldStreamEntitiesWithQueryAnnotatedMethod() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		Stream<SampleEntity> stream = streamingRepository.streamEntitiesByType("abc");
+
+		long count = stream.peek(sampleEntity -> assertThat(sampleEntity).isInstanceOf(SampleEntity.class)).count();
+		assertThat(count).isEqualTo(20);
+	}
+
+	@Test // DATAES-891
+	void shouldStreamSearchHitsWithQueryAnnotatedMethod() {
+		List<SampleEntity> entities = createSampleEntities("abc", 20);
+		repository.saveAll(entities);
+
+		Stream<SearchHit<SampleEntity>> stream = streamingRepository.streamSearchHitsByType("abc");
+
+		long count = stream.peek(sampleEntity -> assertThat(sampleEntity).isInstanceOf(SearchHit.class)).count();
+		assertThat(count).isEqualTo(20);
+	}
+
 	@Data
 	@NoArgsConstructor
 	@AllArgsConstructor
@@ -1568,6 +1663,10 @@ public abstract class CustomMethodRepositoryBaseTests {
 		List<SampleEntity> findByKeywordIn(List<String> keywords);
 
 		List<SampleEntity> findByKeywordNotIn(List<String> keywords);
+
+		List<SampleEntity> findByMessageIn(List<String> keywords);
+
+		List<SampleEntity> findByMessageNotIn(List<String> keywords);
 
 		Page<SampleEntity> findByIdNotIn(List<String> ids, Pageable pageable);
 
@@ -1656,5 +1755,12 @@ public abstract class CustomMethodRepositoryBaseTests {
 		Stream<SampleEntity> findByType(String type);
 
 		Stream<SampleEntity> findByType(String type, Pageable pageable);
+
+		@Query("{\"bool\": {\"must\": [{\"term\": {\"type\": \"?0\"}}]}}")
+		Stream<SampleEntity> streamEntitiesByType(String type);
+
+		@Query("{\"bool\": {\"must\": [{\"term\": {\"type\": \"?0\"}}]}}")
+		Stream<SearchHit<SampleEntity>> streamSearchHitsByType(String type);
+
 	}
 }

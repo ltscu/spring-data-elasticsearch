@@ -15,23 +15,20 @@
  */
 package org.springframework.data.elasticsearch.core;
 
-import lombok.AccessLevel;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
-
 import java.util.Map;
 
 import org.springframework.core.convert.ConversionService;
+import org.springframework.data.elasticsearch.core.join.JoinField;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentEntity;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentProperty;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.SeqNoPrimaryTerm;
 import org.springframework.data.mapping.IdentifierAccessor;
 import org.springframework.data.mapping.PersistentPropertyAccessor;
 import org.springframework.data.mapping.context.MappingContext;
 import org.springframework.data.mapping.model.ConvertingPropertyAccessor;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 /**
  * Common operations performed on an entity in the context of it's mapping metadata.
@@ -39,18 +36,22 @@ import org.springframework.util.StringUtils;
  * @author Mark Paluch
  * @author Christoph Strobl
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
  * @since 3.2
  */
 class EntityOperations {
 
 	private static final String ID_FIELD = "id";
 
+	private final MappingContext<? extends ElasticsearchPersistentEntity<?>, ElasticsearchPersistentProperty> context;
+
 	public EntityOperations(
-			@NonNull MappingContext<? extends ElasticsearchPersistentEntity<?>, ElasticsearchPersistentProperty> context) {
+			MappingContext<? extends ElasticsearchPersistentEntity<?>, ElasticsearchPersistentProperty> context) {
+
+		Assert.notNull(context, "context must not be null");
+
 		this.context = context;
 	}
-
-	private final @NonNull MappingContext<? extends ElasticsearchPersistentEntity<?>, ElasticsearchPersistentProperty> context;
 
 	/**
 	 * Creates a new {@link Entity} for the given bean.
@@ -99,9 +100,24 @@ class EntityOperations {
 	 * @param index index name override can be {@literal null}.
 	 * @param type index type override can be {@literal null}.
 	 * @return the {@link IndexCoordinates} containing index name and index type.
+	 * @deprecated since 4.1, use {@link EntityOperations#determineIndex(Entity, String)}
 	 */
+	@Deprecated
 	IndexCoordinates determineIndex(Entity<?> entity, @Nullable String index, @Nullable String type) {
 		return determineIndex(entity.getPersistentEntity(), index, type);
+	}
+
+	/**
+	 * Determine index name and type name from {@link Entity} with {@code index} and {@code type} overrides. Allows using
+	 * preferred values for index and type if provided, otherwise fall back to index and type defined on entity level.
+	 *
+	 * @param entity the entity to determine the index name. Can be {@literal null} if {@code index} and {@literal type}
+	 *          are provided.
+	 * @param index index name override can be {@literal null}.
+	 * @return the {@link IndexCoordinates} containing index name and index type.
+	 */
+	IndexCoordinates determineIndex(Entity<?> entity, @Nullable String index) {
+		return determineIndex(entity.getPersistentEntity(), index);
 	}
 
 	/**
@@ -114,20 +130,27 @@ class EntityOperations {
 	 * @param index index name override can be {@literal null}.
 	 * @param type index type override can be {@literal null}.
 	 * @return the {@link IndexCoordinates} containing index name and index type.
+	 * @deprecated since 4.1, use {@link EntityOperations#determineIndex(ElasticsearchPersistentEntity, String)}
 	 */
+	@Deprecated
 	IndexCoordinates determineIndex(ElasticsearchPersistentEntity<?> persistentEntity, @Nullable String index,
 			@Nullable String type) {
-		return persistentEntity.getIndexCoordinates();
+		return determineIndex(persistentEntity, index);
 	}
 
-	private static String indexName(@Nullable ElasticsearchPersistentEntity<?> entity, @Nullable String index) {
-
-		if (StringUtils.isEmpty(index)) {
-			Assert.notNull(entity, "Cannot determine index name");
-			return entity.getIndexCoordinates().getIndexName();
-		}
-
-		return index;
+	/**
+	 * Determine index name and type name from {@link ElasticsearchPersistentEntity} with {@code index} and {@code type}
+	 * overrides. Allows using preferred values for index and type if provided, otherwise fall back to index and type
+	 * defined on entity level.
+	 *
+	 * @param persistentEntity the entity to determine the index name. Can be {@literal null} if {@code index} and
+	 *          {@literal type} are provided.
+	 * @param index index name override can be {@literal null}.
+	 * @return the {@link IndexCoordinates} containing index name and index type.
+	 * @since 4.1
+	 */
+	IndexCoordinates determineIndex(ElasticsearchPersistentEntity<?> persistentEntity, @Nullable String index) {
+		return index != null ? IndexCoordinates.of(index) : persistentEntity.getIndexCoordinates();
 	}
 
 	/**
@@ -213,14 +236,18 @@ class EntityOperations {
 		 * Returns whether the entity has a parent.
 		 *
 		 * @return {@literal true} if the entity has a parent that has an {@literal id}.
+		 * @deprecated since 4.1, not supported anymore by Elasticsearch
 		 */
+		@Deprecated
 		boolean hasParent();
 
 		/**
 		 * Returns the parent Id. Can be {@literal null}.
 		 *
 		 * @return can be {@literal null}.
+		 * @deprecated since 4.1, not supported anymore by Elasticsearch
 		 */
+		@Deprecated
 		@Nullable
 		Object getParentId();
 
@@ -257,6 +284,32 @@ class EntityOperations {
 		@Override
 		@Nullable
 		Number getVersion();
+
+		/**
+		 * Returns whether there is a property with type SeqNoPrimaryTerm in this entity.
+		 *
+		 * @return true if there is SeqNoPrimaryTerm property
+		 * @since 4.0
+		 */
+		boolean hasSeqNoPrimaryTerm();
+
+		/**
+		 * Returns SeqNoPropertyTerm for this entity.
+		 *
+		 * @return SeqNoPrimaryTerm, may be {@literal null}
+		 * @since 4.0
+		 */
+		@Nullable
+		SeqNoPrimaryTerm getSeqNoPrimaryTerm();
+
+		/**
+		 * returns the routing for the entity if it is available
+		 * 
+		 * @return routing if available
+		 * @since 4.1
+		 */
+		@Nullable
+		String getRouting();
 	}
 
 	/**
@@ -264,8 +317,14 @@ class EntityOperations {
 	 * @author Christoph Strobl
 	 * @since 3.2
 	 */
-	@RequiredArgsConstructor
 	private static class MapBackedEntity<T extends Map<String, Object>> implements AdaptibleEntity<T> {
+
+		public MapBackedEntity(T map) {
+
+			Assert.notNull(map, "map must not be null");
+
+			this.map = map;
+		}
 
 		private final T map;
 
@@ -328,6 +387,16 @@ class EntityOperations {
 			return null;
 		}
 
+		@Override
+		public boolean hasSeqNoPrimaryTerm() {
+			return false;
+		}
+
+		@Override
+		public SeqNoPrimaryTerm getSeqNoPrimaryTerm() {
+			return null;
+		}
+
 		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity#incrementVersion()
@@ -361,6 +430,11 @@ class EntityOperations {
 		 */
 		@Override
 		public ElasticsearchPersistentEntity<?> getPersistentEntity() {
+			return null;
+		}
+
+		@Override
+		public String getRouting() {
 			return null;
 		}
 	}
@@ -406,12 +480,23 @@ class EntityOperations {
 	 * @param <T>
 	 * @since 3.2
 	 */
-	@RequiredArgsConstructor(access = AccessLevel.PROTECTED)
 	private static class MappedEntity<T> implements Entity<T> {
 
 		private final ElasticsearchPersistentEntity<?> entity;
 		private final IdentifierAccessor idAccessor;
 		private final PersistentPropertyAccessor<T> propertyAccessor;
+
+		private MappedEntity(ElasticsearchPersistentEntity<?> entity, IdentifierAccessor idAccessor,
+				PersistentPropertyAccessor<T> propertyAccessor) {
+
+			Assert.notNull(entity, "entity must not ne null");
+			Assert.notNull(idAccessor, "idAccessor must not ne null");
+			Assert.notNull(propertyAccessor, "propertyAccessor must not ne null");
+
+			this.entity = entity;
+			this.idAccessor = idAccessor;
+			this.propertyAccessor = propertyAccessor;
+		}
 
 		private static <T> MappedEntity<T> of(T bean,
 				MappingContext<? extends ElasticsearchPersistentEntity<?>, ElasticsearchPersistentProperty> context) {
@@ -423,56 +508,32 @@ class EntityOperations {
 			return new MappedEntity<>(entity, identifierAccessor, propertyAccessor);
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.Entity#getId()
-		 */
 		@Override
 		public Object getId() {
 			return idAccessor.getIdentifier();
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.Entity#isVersionedEntity()
-		 */
 		@Override
 		public boolean isVersionedEntity() {
 			return entity.hasVersionProperty();
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.Entity#getVersion()
-		 */
 		@Override
 		@Nullable
 		public Object getVersion() {
-			return propertyAccessor.getProperty(entity.getRequiredVersionProperty());
+			return propertyAccessor.getProperty(entity.getVersionProperty());
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.Entity#getBean()
-		 */
 		@Override
 		public T getBean() {
 			return propertyAccessor.getBean();
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.Entity#isNew()
-		 */
 		@Override
 		public boolean isNew() {
 			return entity.isNew(propertyAccessor.getBean());
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.Entity#getPersistentEntity()
-		 */
 		@Override
 		public ElasticsearchPersistentEntity<?> getPersistentEntity() {
 			return entity;
@@ -488,15 +549,17 @@ class EntityOperations {
 		private final ElasticsearchPersistentEntity<?> entity;
 		private final ConvertingPropertyAccessor<T> propertyAccessor;
 		private final IdentifierAccessor identifierAccessor;
+		private final ConversionService conversionService;
 
 		private AdaptibleMappedEntity(ElasticsearchPersistentEntity<?> entity, IdentifierAccessor identifierAccessor,
-				ConvertingPropertyAccessor<T> propertyAccessor) {
+				ConvertingPropertyAccessor<T> propertyAccessor, ConversionService conversionService) {
 
 			super(entity, identifierAccessor, propertyAccessor);
 
 			this.entity = entity;
 			this.propertyAccessor = propertyAccessor;
 			this.identifierAccessor = identifierAccessor;
+			this.conversionService = conversionService;
 		}
 
 		static <T> AdaptibleEntity<T> of(T bean,
@@ -508,22 +571,15 @@ class EntityOperations {
 			PersistentPropertyAccessor<T> propertyAccessor = entity.getPropertyAccessor(bean);
 
 			return new AdaptibleMappedEntity<>(entity, identifierAccessor,
-					new ConvertingPropertyAccessor<>(propertyAccessor, conversionService));
+					new ConvertingPropertyAccessor<>(propertyAccessor, conversionService), conversionService);
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity#hasParent()
-		 */
 		@Override
 		public boolean hasParent() {
 			return getRequiredPersistentEntity().getParentIdProperty() != null;
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity#getParentId()
-		 */
+		@Deprecated
 		@Override
 		public Object getParentId() {
 
@@ -531,10 +587,6 @@ class EntityOperations {
 			return propertyAccessor.getProperty(parentProperty);
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity#populateIdIfNecessary(java.lang.Object)
-		 */
 		@Nullable
 		@Override
 		public T populateIdIfNecessary(@Nullable Object id) {
@@ -559,23 +611,27 @@ class EntityOperations {
 			return propertyAccessor.getBean();
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.MappedEntity#getVersion()
-		 */
 		@Override
 		@Nullable
 		public Number getVersion() {
 
-			ElasticsearchPersistentProperty versionProperty = entity.getRequiredVersionProperty();
-
-			return propertyAccessor.getProperty(versionProperty, Number.class);
+			ElasticsearchPersistentProperty versionProperty = entity.getVersionProperty();
+			return versionProperty !=  null ? propertyAccessor.getProperty(versionProperty, Number.class) : null;
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity#initializeVersionProperty()
-		 */
+		@Override
+		public boolean hasSeqNoPrimaryTerm() {
+			return entity.hasSeqNoPrimaryTermProperty();
+		}
+
+		@Override
+		public SeqNoPrimaryTerm getSeqNoPrimaryTerm() {
+
+			ElasticsearchPersistentProperty seqNoPrimaryTermProperty = entity.getRequiredSeqNoPrimaryTermProperty();
+
+			return propertyAccessor.getProperty(seqNoPrimaryTermProperty, SeqNoPrimaryTerm.class);
+		}
+
 		@Override
 		public T initializeVersionProperty() {
 
@@ -590,10 +646,6 @@ class EntityOperations {
 			return propertyAccessor.getBean();
 		}
 
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity#incrementVersion()
-		 */
 		@Override
 		public T incrementVersion() {
 
@@ -604,6 +656,22 @@ class EntityOperations {
 			propertyAccessor.setProperty(versionProperty, nextVersion);
 
 			return propertyAccessor.getBean();
+		}
+
+		@Override
+		public String getRouting() {
+
+			ElasticsearchPersistentProperty joinFieldProperty = entity.getJoinFieldProperty();
+
+			if (joinFieldProperty != null) {
+				JoinField<?> joinField = propertyAccessor.getProperty(joinFieldProperty, JoinField.class);
+
+				if (joinField != null && joinField.getParent() != null) {
+					return conversionService.convert(joinField.getParent(), String.class);
+				}
+			}
+
+			return null;
 		}
 	}
 

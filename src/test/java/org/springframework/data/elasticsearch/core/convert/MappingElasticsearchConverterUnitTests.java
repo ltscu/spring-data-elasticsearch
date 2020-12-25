@@ -15,6 +15,7 @@
  */
 package org.springframework.data.elasticsearch.core.convert;
 
+import static java.util.Collections.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.skyscreamer.jsonassert.JSONAssert.*;
 
@@ -25,6 +26,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -38,6 +40,8 @@ import java.util.Map;
 
 import org.json.JSONException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.converter.Converter;
@@ -53,8 +57,17 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.annotations.GeoPointField;
 import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonEntity;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonGeometryCollection;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonLineString;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonMultiLineString;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonMultiPoint;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonMultiPolygon;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonPoint;
+import org.springframework.data.elasticsearch.core.geo.GeoJsonPolygon;
 import org.springframework.data.elasticsearch.core.geo.GeoPoint;
 import org.springframework.data.elasticsearch.core.mapping.SimpleElasticsearchMappingContext;
+import org.springframework.data.elasticsearch.core.query.SeqNoPrimaryTerm;
 import org.springframework.data.geo.Box;
 import org.springframework.data.geo.Circle;
 import org.springframework.data.geo.Point;
@@ -68,6 +81,8 @@ import org.springframework.lang.Nullable;
  * @author Christoph Strobl
  * @author Mark Paluch
  * @author Peter-Josef Meisch
+ * @author Konrad Kurdej
+ * @author Roman Puchkovskiy
  */
 public class MappingElasticsearchConverterUnitTests {
 
@@ -98,6 +113,7 @@ public class MappingElasticsearchConverterUnitTests {
 	Document rifleAsMap;
 	Document shotGunAsMap;
 	Document bigBunsCafeAsMap;
+	Document notificationAsMap;
 
 	@BeforeEach
 	public void init() {
@@ -136,13 +152,13 @@ public class MappingElasticsearchConverterUnitTests {
 		observatoryRoad = new Address();
 		observatoryRoad.city = "Los Angeles";
 		observatoryRoad.street = "2800 East Observatory Road";
-		observatoryRoad.location = new Point(34.118347D, -118.3026284D);
+		observatoryRoad.location = new Point(-118.3026284D, 34.118347D);
 
 		bigBunsCafe = new Place();
 		bigBunsCafe.name = "Big Buns Cafe";
 		bigBunsCafe.city = "Los Angeles";
 		bigBunsCafe.street = "15 South Fremont Avenue";
-		bigBunsCafe.location = new Point(34.0945637D, -118.1545845D);
+		bigBunsCafe.location = new Point(-118.1545845D, 34.0945637D);
 
 		sarahAsMap = Document.create();
 		sarahAsMap.put("id", "sarah");
@@ -193,6 +209,17 @@ public class MappingElasticsearchConverterUnitTests {
 		shotGunAsMap = Document.create();
 		shotGunAsMap.put("model", "Ithaca 37 Pump Shotgun");
 		shotGunAsMap.put("_class", ShotGun.class.getName());
+
+		notificationAsMap = Document.create();
+		notificationAsMap.put("id", 1L);
+		notificationAsMap.put("fromEmail", "from@email.com");
+		notificationAsMap.put("toEmail", "to@email.com");
+		Map<String, Object> data = new HashMap<>();
+		data.put("documentType", "abc");
+		data.put("content", null);
+		notificationAsMap.put("params", data);
+		notificationAsMap.put("_class",
+				"org.springframework.data.elasticsearch.core.convert.MappingElasticsearchConverterUnitTests$Notification");
 	}
 
 	@Test
@@ -241,11 +268,11 @@ public class MappingElasticsearchConverterUnitTests {
 	}
 
 	@Test // DATAES-530
-	public void shouldMapJsonStringToObject() {
+	public void shouldReadJsonStringToObject() {
 		// Given
 
 		// When
-		Car result = mappingElasticsearchConverter.mapDocument(Document.parse(JSON_STRING), Car.class);
+		Car result = mappingElasticsearchConverter.read(Car.class, Document.parse(JSON_STRING));
 
 		// Then
 		assertThat(result).isNotNull();
@@ -254,22 +281,44 @@ public class MappingElasticsearchConverterUnitTests {
 	}
 
 	@Test // DATAES-530
-	public void shouldMapGeoPointElasticsearchNames() {
+	public void shouldMapGeoPointElasticsearchNames() throws JSONException {
 		// given
-		Point point = new Point(10, 20);
-		String pointAsString = point.getX() + "," + point.getY();
-		double[] pointAsArray = { point.getX(), point.getY() };
+		double lon = 5;
+		double lat = 48;
+		Point point = new Point(lon, lat);
+		// ES has Strings in "lat,lon", but has arrays as [lon,lat]!!
+		String pointAsString = lat + "," + lon;
+		double[] pointAsArray = { lon, lat };
+
+		String expected = "{\n" + //
+				"  \"pointA\": {\n" + //
+				"    \"lon\": 5.0,\n" + //
+				"    \"lat\": 48.0\n" + //
+				"  },\n" + //
+				"  \"pointB\": {\n" + //
+				"    \"lon\": 5.0,\n" + //
+				"    \"lat\": 48.0\n" + //
+				"  },\n" + //
+				"  \"pointC\": \"48.0,5.0\",\n" + //
+				"  \"pointD\": [\n" + //
+				"    5.0,\n" + //
+				"    48.0\n" + //
+				"  ]\n" + //
+				"}\n"; //
+
 		GeoEntity geoEntity = GeoEntity.builder().pointA(point).pointB(GeoPoint.fromPoint(point)).pointC(pointAsString)
 				.pointD(pointAsArray).build();
 		// when
 		String jsonResult = mappingElasticsearchConverter.mapObject(geoEntity).toJson();
 
 		// then
-		assertThat(jsonResult).contains(pointTemplate("pointA", point));
-		assertThat(jsonResult).contains(pointTemplate("pointB", point));
-		assertThat(jsonResult).contains(String.format(Locale.ENGLISH, "\"%s\":\"%s\"", "pointC", pointAsString));
-		assertThat(jsonResult)
-				.contains(String.format(Locale.ENGLISH, "\"%s\":[%.1f,%.1f]", "pointD", pointAsArray[0], pointAsArray[1]));
+
+		assertEquals(expected, jsonResult, false);
+		// assertThat(jsonResult).contains(pointTemplate("pointA", point));
+		// assertThat(jsonResult).contains(pointTemplate("pointB", point));
+		// assertThat(jsonResult).contains(String.format(Locale.ENGLISH, "\"%s\":\"%s\"", "pointC", pointAsString));
+		// assertThat(jsonResult)
+		// .contains(String.format(Locale.ENGLISH, "\"%s\":[%.1f,%.1f]", "pointD", pointAsArray[0], pointAsArray[1]));
 	}
 
 	@Test // DATAES-530
@@ -600,7 +649,26 @@ public class MappingElasticsearchConverterUnitTests {
 		assertEquals(expected, json, false);
 	}
 
-	@Test
+	@Test // DATAES-924
+	@DisplayName("should write list of LocalDate")
+	void shouldWriteListOfLocalDate() throws JSONException {
+
+		LocalDatesEntity entity = new LocalDatesEntity();
+		entity.setId("4711");
+		entity.setDates(Arrays.asList(LocalDate.of(2020, 9, 15), LocalDate.of(2019, 5, 1)));
+		String expected = "{\n" + //
+				"  \"id\": \"4711\",\n" + //
+				"  \"dates\": [\"15.09.2020\", \"01.05.2019\"]\n" + //
+				"}\n"; //
+
+		Document document = Document.create();
+		mappingElasticsearchConverter.write(entity, document);
+		String json = document.toJson();
+
+		assertEquals(expected, json, false);
+	}
+
+	@Test // DATAES-716
 	void shouldReadLocalDate() {
 		Document document = Document.create();
 		document.put("id", "4711");
@@ -616,8 +684,516 @@ public class MappingElasticsearchConverterUnitTests {
 		assertThat(person.getGender()).isEqualTo(Gender.MAN);
 	}
 
+	@Test // DATAES-924
+	@DisplayName("should read list of LocalDate")
+	void shouldReadListOfLocalDate() {
+
+		Document document = Document.create();
+		document.put("id", "4711");
+		document.put("dates", new String[] { "15.09.2020", "01.05.2019" });
+
+		LocalDatesEntity entity = mappingElasticsearchConverter.read(LocalDatesEntity.class, document);
+
+		assertThat(entity.getId()).isEqualTo("4711");
+		assertThat(entity.getDates()).hasSize(2).containsExactly(LocalDate.of(2020, 9, 15), LocalDate.of(2019, 5, 1));
+	}
+
+	@Test // DATAES-763
+	void writeEntityWithMapDataType() {
+
+		Notification notification = new Notification();
+		notification.fromEmail = "from@email.com";
+		notification.toEmail = "to@email.com";
+		Map<String, Object> data = new HashMap<>();
+		data.put("documentType", "abc");
+		data.put("content", null);
+		notification.params = data;
+		notification.id = 1L;
+
+		Document document = Document.create();
+		mappingElasticsearchConverter.write(notification, document);
+		assertThat(document).isEqualTo(notificationAsMap);
+	}
+
+	@Test // DATAES-763
+	void readEntityWithMapDataType() {
+
+		Document document = Document.create();
+		document.put("id", 1L);
+		document.put("fromEmail", "from@email.com");
+		document.put("toEmail", "to@email.com");
+		Map<String, Object> data = new HashMap<>();
+		data.put("documentType", "abc");
+		data.put("content", null);
+		document.put("params", data);
+
+		Notification notification = mappingElasticsearchConverter.read(Notification.class, document);
+		assertThat(notification.params.get("documentType")).isEqualTo("abc");
+		assertThat(notification.params.get("content")).isNull();
+	}
+
+	@Test // DATAES-795
+	void readGenericMapWithSimpleTypes() {
+		Map<String, Object> mapWithSimpleValues = new HashMap<>();
+		mapWithSimpleValues.put("int", 1);
+		mapWithSimpleValues.put("string", "string");
+		mapWithSimpleValues.put("boolean", true);
+
+		Document document = Document.create();
+		document.put("schemaLessObject", mapWithSimpleValues);
+
+		SchemaLessObjectWrapper wrapper = mappingElasticsearchConverter.read(SchemaLessObjectWrapper.class, document);
+		assertThat(wrapper.getSchemaLessObject()).isEqualTo(mapWithSimpleValues);
+	}
+
+	@Test // DATAES-797
+	void readGenericListWithMaps() {
+		Map<String, Object> simpleMap = new HashMap<>();
+		simpleMap.put("int", 1);
+
+		List<Map<String, Object>> listWithSimpleMap = new ArrayList<>();
+		listWithSimpleMap.add(simpleMap);
+
+		Map<String, List<Map<String, Object>>> mapWithSimpleList = new HashMap<>();
+		mapWithSimpleList.put("someKey", listWithSimpleMap);
+
+		Document document = Document.create();
+		document.put("schemaLessObject", mapWithSimpleList);
+
+		SchemaLessObjectWrapper wrapper = mappingElasticsearchConverter.read(SchemaLessObjectWrapper.class, document);
+		assertThat(wrapper.getSchemaLessObject()).isEqualTo(mapWithSimpleList);
+	}
+
+	@Test // DATAES-799
+	void shouldNotWriteSeqNoPrimaryTermProperty() {
+		EntityWithSeqNoPrimaryTerm entity = new EntityWithSeqNoPrimaryTerm();
+		entity.seqNoPrimaryTerm = new SeqNoPrimaryTerm(1L, 2L);
+		Document document = Document.create();
+
+		mappingElasticsearchConverter.write(entity, document);
+
+		assertThat(document).doesNotContainKey("seqNoPrimaryTerm");
+	}
+
+	@Test // DATAES-799
+	void shouldNotReadSeqNoPrimaryTermProperty() {
+		Document document = Document.create().append("seqNoPrimaryTerm", emptyMap());
+
+		EntityWithSeqNoPrimaryTerm entity = mappingElasticsearchConverter.read(EntityWithSeqNoPrimaryTerm.class, document);
+
+		assertThat(entity.seqNoPrimaryTerm).isNull();
+	}
+
+	@Test // DATAES-845
+	void shouldWriteCollectionsWithNullValues() throws JSONException {
+		EntityWithListProperty entity = new EntityWithListProperty();
+		entity.setId("42");
+		entity.setValues(Arrays.asList(null, "two", null, "four"));
+
+		String expected = '{' + //
+				"  \"id\": \"42\"," + //
+				"  \"values\": [null, \"two\", null, \"four\"]" + //
+				'}';
+		Document document = Document.create();
+		mappingElasticsearchConverter.write(entity, document);
+		String json = document.toJson();
+
+		assertEquals(expected, json, false);
+	}
+
+	@Test // DATAES-857
+	void shouldWriteEntityWithListOfGeoPoints() throws JSONException {
+
+		GeoPointListEntity entity = new GeoPointListEntity();
+		entity.setId("42");
+		List<GeoPoint> locations = Arrays.asList(new GeoPoint(12.34, 23.45), new GeoPoint(34.56, 45.67));
+		entity.setLocations(locations);
+
+		String expected = "{\n" + //
+				"  \"id\": \"42\",\n" + //
+				"  \"locations\": [\n" + //
+				"    {\n" + //
+				"      \"lat\": 12.34,\n" + //
+				"      \"lon\": 23.45\n" + //
+				"    },\n" + //
+				"    {\n" + //
+				"      \"lat\": 34.56,\n" + //
+				"      \"lon\": 45.67\n" + //
+				"    }\n" + //
+				"  ]\n" + //
+				"}"; //
+		Document document = Document.create();
+
+		mappingElasticsearchConverter.write(entity, document);
+		String json = document.toJson();
+
+		assertEquals(expected, json, false);
+	}
+
+	@Test // DATAES-857
+	void shouldReadEntityWithListOfGeoPoints() {
+
+		String json = "{\n" + //
+				"  \"id\": \"42\",\n" + //
+				"  \"locations\": [\n" + //
+				"    {\n" + //
+				"      \"lat\": 12.34,\n" + //
+				"      \"lon\": 23.45\n" + //
+				"    },\n" + //
+				"    {\n" + //
+				"      \"lat\": 34.56,\n" + //
+				"      \"lon\": 45.67\n" + //
+				"    }\n" + //
+				"  ]\n" + //
+				"}"; //
+
+		Document document = Document.parse(json);
+
+		GeoPointListEntity entity = mappingElasticsearchConverter.read(GeoPointListEntity.class, document);
+
+		assertThat(entity.id).isEqualTo("42");
+		assertThat(entity.locations).containsExactly(new GeoPoint(12.34, 23.45), new GeoPoint(34.56, 45.67));
+	}
+
+	@Test // DATAES-865
+	void shouldWriteEntityWithMapAsObject() throws JSONException {
+
+		Map<String, Object> map = new LinkedHashMap<>();
+		map.put("foo", "bar");
+
+		EntityWithObject entity = new EntityWithObject();
+		entity.setId("42");
+		entity.setContent(map);
+
+		String expected = "{\n" + //
+				"  \"id\": \"42\",\n" + //
+				"  \"content\": {\n" + //
+				"    \"foo\": \"bar\"\n" + //
+				"  }\n" + //
+				"}\n"; //
+
+		Document document = Document.create();
+
+		mappingElasticsearchConverter.write(entity, document);
+
+		assertEquals(expected, document.toJson(), false);
+	}
+
+	@Test // DATAES-920
+	@DisplayName("should write null value if configured")
+	void shouldWriteNullValueIfConfigured() throws JSONException {
+
+		EntityWithNullField entity = new EntityWithNullField();
+		entity.setId("42");
+
+		String expected = "{\n" + //
+				"  \"id\": \"42\",\n" + //
+				"  \"saved\": null\n" + //
+				"}\n"; //
+
+		Document document = Document.create();
+
+		mappingElasticsearchConverter.write(entity, document);
+
+		assertEquals(expected, document.toJson(), false);
+	}
+
+	@Nested
+	class GeoJsonUnitTests {
+		private GeoJsonEntity entity;
+
+		@BeforeEach
+		void setup() {
+			GeoJsonMultiLineString multiLineString = GeoJsonMultiLineString.of(Arrays.asList( //
+					GeoJsonLineString.of(new Point(12, 34), new Point(56, 78)), //
+					GeoJsonLineString.of(new Point(90, 12), new Point(34, 56)) //
+			));
+			GeoJsonPolygon geoJsonPolygon = GeoJsonPolygon //
+					.of(new Point(12, 34), new Point(56, 78), new Point(90, 12), new Point(12, 34)) //
+					.withInnerRing(new Point(21, 43), new Point(65, 87), new Point(9, 21), new Point(21, 43));
+			GeoJsonMultiPolygon geoJsonMultiPolygon = GeoJsonMultiPolygon.of(
+					Arrays.asList(GeoJsonPolygon.of(new Point(12, 34), new Point(56, 78), new Point(90, 12), new Point(12, 34)),
+							GeoJsonPolygon.of(new Point(21, 43), new Point(65, 87), new Point(9, 21), new Point(21, 43))));
+			GeoJsonPoint geoJsonPoint = GeoJsonPoint.of(12, 34);
+			GeoJsonGeometryCollection geoJsonGeometryCollection = GeoJsonGeometryCollection
+					.of(Arrays.asList(GeoJsonPoint.of(12, 34), GeoJsonPolygon
+							.of(GeoJsonLineString.of(new Point(12, 34), new Point(56, 78), new Point(90, 12), new Point(12, 34)))));
+
+			entity = GeoJsonEntity.builder() //
+					.id("42") //
+					.point1(GeoJsonPoint.of(12, 34)) //
+					.point2(GeoJsonPoint.of(56, 78)) //
+					.multiPoint1(GeoJsonMultiPoint.of(new Point(12, 34), new Point(56, 78), new Point(90, 12))) //
+					.multiPoint2(GeoJsonMultiPoint.of(new Point(90, 12), new Point(56, 78), new Point(12, 34))) //
+					.lineString1(GeoJsonLineString.of(new Point(12, 34), new Point(56, 78), new Point(90, 12))) //
+					.lineString2(GeoJsonLineString.of(new Point(90, 12), new Point(56, 78), new Point(12, 34))) //
+					.multiLineString1(multiLineString) //
+					.multiLineString2(multiLineString) //
+					.polygon1(geoJsonPolygon) //
+					.polygon2(geoJsonPolygon) //
+					.multiPolygon1(geoJsonMultiPolygon) //
+					.multiPolygon2(geoJsonMultiPolygon) //
+					.geometryCollection1(geoJsonGeometryCollection) //
+					.geometryCollection2(geoJsonGeometryCollection) //
+					.build();
+		}
+
+		@Test // DATAES-930
+		@DisplayName("should write GeoJson properties")
+		void shouldWriteGeoJsonProperties() throws JSONException {
+
+			String json = "{\n" + //
+					"  \"id\": \"42\",\n" + //
+					"  \"point1\": {\n" + //
+					"    \"type\": \"Point\",\n" + //
+					"    \"coordinates\": [12.0, 34.0]\n" + //
+					"  },\n" + //
+					"  \"point2\": {\n" + //
+					"    \"type\": \"Point\",\n" + //
+					"    \"coordinates\": [56.0, 78.0]\n" + //
+					"  },\n" + //
+					"  \"multiPoint1\": {\n" + //
+					"    \"type\": \"MultiPoint\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [12.0, 34.0],\n" + //
+					"      [56.0, 78.0],\n" + //
+					"      [90.0, 12.0]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiPoint2\": {\n" + //
+					"    \"type\": \"MultiPoint\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [90.0, 12.0],\n" + //
+					"      [56.0, 78.0],\n" + //
+					"      [12.0, 34.0]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"lineString1\": {\n" + //
+					"    \"type\": \"LineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [12.0, 34.0],\n" + //
+					"      [56.0, 78.0],\n" + //
+					"      [90.0, 12.0]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"lineString2\": {\n" + //
+					"    \"type\": \"LineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [90.0, 12.0],\n" + //
+					"      [56.0, 78.0],\n" + //
+					"      [12.0, 34.0]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiLineString1\":{\n" + //
+					"    \"type\": \"MultiLineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12.0, 34.0], [56.0, 78.0]],\n" + //
+					"      [[90.0, 12.0], [34.0, 56.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiLineString2\":{\n" + //
+					"    \"type\": \"MultiLineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12.0, 34.0], [56.0, 78.0]],\n" + //
+					"      [[90.0, 12.0], [34.0, 56.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"polygon1\":{\n" + //
+					"    \"type\": \"Polygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12.0, 34.0],[56.0, 78.0],[90.0, 12.0],[12.0, 34.0]],\n" + //
+					"      [[21.0, 43.0],[65.0, 87.0],[9.0, 21.0],[21.0, 43.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"polygon2\":{\n" + //
+					"    \"type\": \"Polygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12.0, 34.0],[56.0, 78.0],[90.0, 12.0],[12.0, 34.0]],\n" + //
+					"      [[21.0, 43.0],[65.0, 87.0],[9.0, 21.0],[21.0, 43.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiPolygon1\":{\n" + //
+					"    \"type\": \"MultiPolygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[[12.0, 34.0],[56.0, 78.0],[90.0, 12.0],[12.0, 34.0]]],\n" + //
+					"      [[[21.0, 43.0],[65.0, 87.0],[9.0, 21.0],[21.0, 43.0]]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiPolygon2\":{\n" + //
+					"    \"type\": \"MultiPolygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[[12.0, 34.0],[56.0, 78.0],[90.0, 12.0],[12.0, 34.0]]],\n" + //
+					"      [[[21.0, 43.0],[65.0, 87.0],[9.0, 21.0],[21.0, 43.0]]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"geometryCollection1\": {\n" + //
+					"    \"type\": \"GeometryCollection\",\n" + //
+					"    \"geometries\": [\n" + //
+					"      {\n" + //
+					"        \"type\": \"Point\",\n" + //
+					"        \"coordinates\": [12.0, 34.0]\n" + //
+					"      },\n" + //
+					"      {\n" + //
+					"        \"type\": \"Polygon\",\n" + //
+					"        \"coordinates\": [\n" + //
+					"          [[12.0, 34.0], [56.0, 78.0], [90.0, 12.0], [12.0, 34.0]]\n" + //
+					"        ]\n" + //
+					"      }\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"geometryCollection2\": {\n" + //
+					"    \"type\": \"GeometryCollection\",\n" + //
+					"    \"geometries\": [\n" + //
+					"      {\n" + //
+					"        \"type\": \"Point\",\n" + //
+					"        \"coordinates\": [12.0, 34.0]\n" + //
+					"      },\n" + //
+					"      {\n" + //
+					"        \"type\": \"Polygon\",\n" + //
+					"        \"coordinates\": [\n" + //
+					"          [[12.0, 34.0], [56.0, 78.0], [90.0, 12.0], [12.0, 34.0]]\n" + //
+					"        ]\n" + //
+					"      }\n" + //
+					"    ]\n" + //
+					"  }\n" + //
+					"}\n"; //
+
+			Document document = Document.create();
+
+			mappingElasticsearchConverter.write(entity, document);
+
+			assertEquals(json, document.toJson(), false);
+		}
+
+		@Test // DATAES-930
+		@DisplayName("should read GeoJson properties")
+		void shouldReadGeoJsonProperties() {
+
+			// make sure we can read int values as well
+			String json = "{\n" + //
+					"  \"id\": \"42\",\n" + //
+					"  \"point1\": {\n" + //
+					"    \"type\": \"Point\",\n" + //
+					"    \"coordinates\": [12, 34]\n" + //
+					"  },\n" + //
+					"  \"point2\": {\n" + //
+					"    \"type\": \"Point\",\n" + //
+					"    \"coordinates\": [56, 78]\n" + //
+					"  },\n" + //
+					"  \"multiPoint1\": {\n" + //
+					"    \"type\": \"MultiPoint\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [12.0, 34],\n" + //
+					"      [56, 78.0],\n" + //
+					"      [90, 12.0]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiPoint2\": {\n" + //
+					"    \"type\": \"MultiPoint\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [90, 12.0],\n" + //
+					"      [56, 78.0],\n" + //
+					"      [12.0, 34]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"lineString1\": {\n" + //
+					"    \"type\": \"LineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [12.0, 34],\n" + //
+					"      [56, 78.0],\n" + //
+					"      [90, 12.0]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"lineString2\": {\n" + //
+					"    \"type\": \"LineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [90, 12.0],\n" + //
+					"      [56, 78.0],\n" + //
+					"      [12.0, 34]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiLineString1\":{\n" + //
+					"    \"type\": \"MultiLineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12, 34.0], [56, 78.0]],\n" + //
+					"      [[90.0, 12], [34.0, 56]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiLineString2\":{\n" + //
+					"    \"type\": \"MultiLineString\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12.0, 34], [56.0, 78]],\n" + //
+					"      [[90, 12.0], [34, 56.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"polygon1\":{\n" + //
+					"    \"type\": \"Polygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12, 34.0],[56.0, 78],[90, 12.0],[12.0, 34]],\n" + //
+					"      [[21.0, 43],[65, 87.0],[9.0, 21],[21, 43.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"polygon2\":{\n" + //
+					"    \"type\": \"Polygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[12, 34.0],[56.0, 78],[90, 12.0],[12.0, 34]],\n" + //
+					"      [[21.0, 43],[65, 87.0],[9.0, 21],[21, 43.0]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiPolygon1\":{\n" + //
+					"    \"type\": \"MultiPolygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[[12, 34.0],[56.0, 78],[90, 12.0],[12.0, 34]]],\n" + //
+					"      [[[21.0, 43],[65, 87.0],[9.0, 21],[21, 43.0]]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"multiPolygon2\":{\n" + //
+					"    \"type\": \"MultiPolygon\",\n" + //
+					"    \"coordinates\": [\n" + //
+					"      [[[12, 34.0],[56.0, 78],[90, 12.0],[12.0, 34]]],\n" + //
+					"      [[[21.0, 43],[65, 87.0],[9.0, 21],[21, 43.0]]]\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"geometryCollection1\": {\n" + //
+					"    \"type\": \"GeometryCollection\",\n" + //
+					"    \"geometries\": [\n" + //
+					"      {\n" + //
+					"        \"type\": \"Point\",\n" + //
+					"        \"coordinates\": [12, 34.0]\n" + //
+					"      },\n" + //
+					"      {\n" + //
+					"        \"type\": \"Polygon\",\n" + //
+					"        \"coordinates\": [\n" + //
+					"          [[12.0, 34], [56, 78.0], [90.0, 12], [12, 34.0]]\n" + //
+					"        ]\n" + //
+					"      }\n" + //
+					"    ]\n" + //
+					"  },\n" + //
+					"  \"geometryCollection2\": {\n" + //
+					"    \"type\": \"GeometryCollection\",\n" + //
+					"    \"geometries\": [\n" + //
+					"      {\n" + //
+					"        \"type\": \"Point\",\n" + //
+					"        \"coordinates\": [12, 34.0]\n" + //
+					"      },\n" + //
+					"      {\n" + //
+					"        \"type\": \"Polygon\",\n" + //
+					"        \"coordinates\": [\n" + //
+					"          [[12.0, 34], [56, 78.0], [90.0, 12], [12, 34.0]]\n" + //
+					"        ]\n" + //
+					"      }\n" + //
+					"    ]\n" + //
+					"  }\n" + //
+					"}\n"; //
+
+			GeoJsonEntity mapped = mappingElasticsearchConverter.read(GeoJsonEntity.class, Document.parse(json));
+
+			assertThat(entity).isEqualTo(mapped);
+		}
+	}
+
 	private String pointTemplate(String name, Point point) {
-		return String.format(Locale.ENGLISH, "\"%s\":{\"lat\":%.1f,\"lon\":%.1f}", name, point.getX(), point.getY());
+		return String.format(Locale.ENGLISH, "\"%s\":{\"lat\":%.1f,\"lon\":%.1f}", name, point.getY(), point.getX());
 	}
 
 	private Map<String, Object> writeToMap(Object source) {
@@ -651,6 +1227,15 @@ public class MappingElasticsearchConverterUnitTests {
 		List<Inventory> inventoryList;
 		Map<String, Address> shippingAddresses;
 		Map<String, Inventory> inventoryMap;
+	}
+
+	@Data
+	@Getter
+	@Setter
+	static class LocalDatesEntity {
+		@Id private String id;
+		@Field(name = "dates", type = FieldType.Date, format = DateFormat.custom,
+				pattern = "dd.MM.uuuu") private List<LocalDate> dates;
 	}
 
 	enum Gender {
@@ -749,6 +1334,15 @@ public class MappingElasticsearchConverterUnitTests {
 		Map<String, Object> objectMap;
 	}
 
+	@Data
+	static class Notification {
+
+		Long id;
+		String fromEmail;
+		String toEmail;
+		Map<String, Object> params;
+	}
+
 	@WritingConverter
 	static class ShotGunToMapConverter implements Converter<ShotGun, Map<String, Object>> {
 
@@ -786,7 +1380,7 @@ public class MappingElasticsearchConverterUnitTests {
 	@AllArgsConstructor
 	@Builder
 	@org.springframework.data.elasticsearch.annotations.Document(indexName = "test-index-geo-core-entity-mapper",
-			type = "geo-test-index", replicas = 0, refreshInterval = "-1")
+			replicas = 0, refreshInterval = "-1")
 	static class GeoEntity {
 
 		@Id private String id;
@@ -805,4 +1399,47 @@ public class MappingElasticsearchConverterUnitTests {
 
 		@GeoPointField private double[] pointD;
 	}
+
+	@Data
+	@NoArgsConstructor
+	@AllArgsConstructor
+	static class SchemaLessObjectWrapper {
+
+		private Map<String, Object> schemaLessObject;
+	}
+
+	@Data
+	@org.springframework.data.elasticsearch.annotations.Document(
+			indexName = "test-index-entity-with-seq-no-primary-term-mapper")
+	static class EntityWithSeqNoPrimaryTerm {
+
+		@Nullable private SeqNoPrimaryTerm seqNoPrimaryTerm;
+	}
+
+	@Data
+	static class EntityWithListProperty {
+		@Id private String id;
+
+		private List<String> values;
+	}
+
+	@Data
+	static class GeoPointListEntity {
+		@Id String id;
+		List<GeoPoint> locations;
+	}
+
+	@Data
+	static class EntityWithObject {
+		@Id private String id;
+		private Object content;
+	}
+
+	@Data
+	static class EntityWithNullField {
+		@Id private String id;
+		@Field(type = FieldType.Text) private String notSaved;
+		@Field(type = FieldType.Text, storeNullValue = true) private String saved;
+	}
+
 }

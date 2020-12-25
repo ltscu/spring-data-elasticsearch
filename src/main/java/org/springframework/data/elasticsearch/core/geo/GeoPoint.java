@@ -15,6 +15,8 @@
  */
 package org.springframework.data.elasticsearch.core.geo;
 
+import java.util.Objects;
+
 import org.springframework.data.geo.Point;
 
 /**
@@ -30,7 +32,7 @@ public class GeoPoint {
 	private double lon;
 
 	private GeoPoint() {
-		//required by mapper to instantiate object
+		// required by mapper to instantiate object
 	}
 
 	public GeoPoint(double latitude, double longitude) {
@@ -53,20 +55,30 @@ public class GeoPoint {
 	 * @return a {@link org.springframework.data.elasticsearch.core.geo.GeoPoint}
 	 */
 	public static GeoPoint fromPoint(Point point) {
-		return new GeoPoint(point.getX(), point.getY());
+		return new GeoPoint(point.getY(), point.getX());
 	}
 
 	public static Point toPoint(GeoPoint point) {
-		return new Point(point.getLat(), point.getLon());
+		return new Point(point.getLon(), point.getLat());
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o)
+			return true;
+		if (o == null || getClass() != o.getClass())
+			return false;
+		GeoPoint geoPoint = (GeoPoint) o;
+		return Double.compare(geoPoint.lat, lat) == 0 && Double.compare(geoPoint.lon, lon) == 0;
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(lat, lon);
 	}
 
 	@Override
 	public String toString() {
-		return "GeoPoint{" +
-				"lat=" + lat +
-				", lon=" + lon +
-				'}';
+		return "GeoPoint{" + "lat=" + lat + ", lon=" + lon + '}';
 	}
 }
-
-

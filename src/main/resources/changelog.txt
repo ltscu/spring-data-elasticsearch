@@ -1,6 +1,375 @@
 Spring Data Elasticsearch Changelog
 ===================================
 
+Changes in version 4.1.2 (2020-12-09)
+-------------------------------------
+* DATAES-991 - Wrong value for TermVector(with_positions_offets_payloads).
+* DATAES-990 - Index creation fails with Authentication object cannot be null on startup.
+* DATAES-987 - IndexOperations getMapping fail when using index alias.
+* DATAES-978 - Accept DateFormat.none for a date property to enable custom Converters.
+* DATAES-977 - Fix versions in reference documentation for 4.1.
+* DATAES-973 - Release 4.1.2 (2020.0.2).
+* DATAES-972 - BeforeConvertCallback should be called before index query is built.
+* DATAES-543 - Adjust configuration support classes so they do not require proxying.
+
+
+Changes in version 4.2.0-M1 (2020-12-09)
+----------------------------------------
+* DATAES-995 - Code Cleanup after DATACMNS-1838.
+* DATAES-994 - Add setup for mutation testing.
+* DATAES-991 - Wrong value for TermVector(with_positions_offets_payloads).
+* DATAES-990 - Index creation fails with Authentication object cannot be null on startup.
+* DATAES-989 - Improve deprecation warning for id properties without annotation.
+* DATAES-988 - Allow specifying max results in NativeSearchQueryBuilder.
+* DATAES-987 - IndexOperations getMapping fail when using index alias.
+* DATAES-986 - Fix Javadoc.
+* DATAES-985 - Add builder method for track_total_hits to NativeSearchQueryBuilder.
+* DATAES-983 - Test dependency hoverfly-java-junit5 leaks into compile scope.
+* DATAES-978 - Accept DateFormat.none for a date property to enable custom Converters.
+* DATAES-976 - Implement CrudRepository.delete(Iterable<ID> ids).
+* DATAES-975 - Upgrade to Elasticsearch 7.10.
+* DATAES-974 - remove usage of deprecated WebClient exchange() method.
+* DATAES-972 - BeforeConvertCallback should be called before index query is built.
+* DATAES-971 - Fix tests for using a proxy with reactive client.
+* DATAES-970 - Take Testcontainers version from the Spring Data Build pom.
+* DATAES-969 - Use ResultProcessor in ElasticsearchPartQuery to build PartTree.
+* DATAES-968 - Enable Maven caching for Jenkins jobs.
+* DATAES-966 - Release 4.2 M1 (2021.0.0).
+* DATAES-882 - HLRC Configuration - add ability to set max connections for the underlying HttpClient.
+* DATAES-588 - Add support for custom callbacks in High Level/Low Level REST Client builder.
+* DATAES-543 - Adjust configuration support classes so they do not require proxying.
+* DATAES-362 - Add support for composable meta annotations.
+* DATAES-247 - Support OpType in IndexQuery.
+
+
+Changes in version 4.0.6.RELEASE (2020-12-09)
+---------------------------------------------
+* DATAES-991 - Wrong value for TermVector(with_positions_offets_payloads).
+* DATAES-969 - Use ResultProcessor in ElasticsearchPartQuery to build PartTree.
+* DATAES-968 - Enable Maven caching for Jenkins jobs.
+* DATAES-964 - Release 4.0.6 (Neumann SR6).
+
+
+Changes in version 3.2.12.RELEASE (2020-12-09)
+----------------------------------------------
+* DATAES-969 - Use ResultProcessor in ElasticsearchPartQuery to build PartTree.
+* DATAES-963 - Release 3.2.12 (Moore SR12).
+
+
+Changes in version 4.1.1 (2020-11-11)
+-------------------------------------
+* DATAES-969 - Use ResultProcessor in ElasticsearchPartQuery to build PartTree.
+* DATAES-968 - Enable Maven caching for Jenkins jobs.
+* DATAES-965 - Release 4.1.1 (2020.0.1).
+
+
+Changes in version 4.1.0 (2020-10-28)
+-------------------------------------
+* DATAES-962 - Deprecate Joda support.
+* DATAES-960 - Upgrade to Elasticsearch 7.9.3.
+* DATAES-956 - Prevent double converter registration.
+* DATAES-953 - DateTimeException occurred "yyyy-MM-dd HH: mm: ss" string is converted to Date.
+* DATAES-952 - Optimize SearchPage implementation.
+* DATAES-951 - Revert DATAES-934.
+* DATAES-950 - Release 4.1 GA (2020.0.0).
+* DATAES-931 - Add query support for geo shape queries.
+* DATAES-796 - Provide new method to return SearchHits in ReactiveElasticsearchClient.
+
+
+Changes in version 4.0.5.RELEASE (2020-10-28)
+---------------------------------------------
+* DATAES-953 - DateTimeException occurred "yyyy-MM-dd HH: mm: ss" string is converted to Date.
+* DATAES-937 - Repository queries with IN filters fail with empty input list.
+* DATAES-936 - Take id property from the source when deserializing an entity.
+* DATAES-926 - Release 4.0.5 (Neumann SR5).
+
+
+Changes in version 3.2.11.RELEASE (2020-10-28)
+----------------------------------------------
+* DATAES-961 - Upgrade to Elasticsearch 6.8.13.
+* DATAES-937 - Repository queries with IN filters fail with empty input list.
+* DATAES-925 - Release 3.2.11 (Moore SR11).
+
+
+Changes in version 3.1.21.RELEASE (2020-10-28)
+----------------------------------------------
+* DATAES-958 - Release 3.1.21 (Lovelace SR21).
+
+
+Changes in version 4.1.0-RC2 (2020-10-14)
+-----------------------------------------
+* DATAES-949 - dependency cleanup.
+* DATAES-947 - Adopt to API changes in Project Reactor.
+* DATAES-945 - Compilation error on JDK11+.
+* DATAES-944 - Simplify logging setup in test environment.
+* DATAES-943 - Add missing mapping parameters.
+* DATAES-940 - Update to Elasticsearch 7.9.2.
+* DATAES-937 - Repository queries with IN filters fail with empty input list.
+* DATAES-936 - Take id property from the source when deserializing an entity.
+* DATAES-935 - Setup integration tests separate from unit tests.
+* DATAES-934 - Add a Query taking method to ElasticsearchRepository.
+* DATAES-933 - Fix typo in javaDoc.
+* DATAES-932 - GeoPoint - Point conversion is wrong.
+* DATAES-930 - Add support for geo_shape type entity properties.
+* DATAES-929 - Support geo_shape field type field type.
+* DATAES-927 - Release 4.1 RC2 (2020.0.0).
+* DATAES-921 - Investigate WebClient.retrieve() instead of using WebClient.exchange().
+
+
+Changes in version 4.1.0-RC1 (2020-09-16)
+-----------------------------------------
+* DATAES-924 - Conversion of properties of collections of Temporal values fails.
+* DATAES-923 - Upgrade to Elasticsearch 7.9.1.
+* DATAES-922 - Move off Sink.emitXXX methods.
+* DATAES-920 - Add parameter to @Field annotation to store null values.
+* DATAES-919 - Fix error messages in test output.
+* DATAES-914 - Use Testcontainers.
+* DATAES-913 - Minor optimization on collection-returning derived queries.
+* DATAES-912 - Derived Query with "In" Keyword does not work on Text field.
+* DATAES-911 - Add documentation for automatic index creation.
+* DATAES-910 - Upgrade to Elasticsearch 7.9.0.
+* DATAES-909 - Add singular update() methods to ReactiveDocumentOperations.
+* DATAES-908 - Fill version on an indexed entity.
+* DATAES-907 - Track Total Hits not working when set to false.
+* DATAES-904 - Release 4.1 RC1 (2020.0.0).
+* DATAES-902 - Update to Elasticsearch 7.8.1.
+* DATAES-898 - Add join-type relevant parts to reactive calls.
+* DATAES-895 - Criteria.OperationKey.NEAR is not used anywhere.
+* DATAES-854 - Add support for rank_feature datatype.
+* DATAES-706 - CriteriaQueryProcessor must handle nested Criteria definitions.
+
+
+Changes in version 4.0.4.RELEASE (2020-09-16)
+---------------------------------------------
+* DATAES-924 - Conversion of properties of collections of Temporal values fails.
+* DATAES-912 - Derived Query with "In" Keyword does not work on Text field.
+* DATAES-905 - Release 4.0.4 (Neumann SR4).
+
+
+Changes in version 3.2.10.RELEASE (2020-09-16)
+----------------------------------------------
+* DATAES-903 - Update to Elasticsearch 6.8.12.
+* DATAES-892 - Fix ElasticsearchEntityMapper recursive descent when reading Map objects.
+* DATAES-888 - Release 3.2.10 (Moore SR10).
+
+
+Changes in version 3.1.20.RELEASE (2020-09-16)
+----------------------------------------------
+* DATAES-887 - Release 3.1.20 (Lovelace SR20).
+
+
+Changes in version 4.0.3.RELEASE (2020-08-12)
+---------------------------------------------
+* DATAES-897 - Add documentation for Highlight annotation.
+* DATAES-896 - Use mainField property of @MultiField annotation instead of additional @Field annotation.
+* DATAES-891 - Returning a Stream from a Query annotated repository method crashes.
+* DATAES-890 - Release 4.0.3 (Neumann SR3).
+
+
+Changes in version 4.1.0-M2 (2020-08-12)
+----------------------------------------
+* DATAES-901 - Operations deleting an entity should use a routing deducted from the entity.
+* DATAES-899 - Add documentation for join-type.
+* DATAES-897 - Add documentation for Highlight annotation.
+* DATAES-896 - Use mainField property of @MultiField annotation instead of additional @Field annotation.
+* DATAES-894 - Adapt to changes in Reactor.
+* DATAES-893 - Adopt to changed module layout of Reactor Netty.
+* DATAES-891 - Returning a Stream from a Query annotated repository method crashes.
+* DATAES-886 - Complete reactive auditing.
+* DATAES-883 - Fix log level on resource load error.
+* DATAES-878 - Wrong value for TermVector(woth_positions_offsets).
+* DATAES-877 - Update test logging dependency.
+* DATAES-876 - Add seqno and primary term to entity on initial save.
+* DATAES-875 - MappingElasticsearchConverter.updateQuery not called at all places.
+* DATAES-874 - Deprecate parent-id related methods and fields.
+* DATAES-872 - Release 4.1 M2 (2020.0.0).
+* DATAES-869 - Update to Elasticsearch 7.8.
+* DATAES-864 - Rework alias management.
+* DATAES-842 - Documentation fixes.
+* DATAES-612 - Add support for index templates.
+* DATAES-433 - Replace parent-child mappings to join field.
+* DATAES-321 - Support time base rolling indices.
+* DATAES-244 - Support alias renaming.
+* DATAES-233 - Support for rolling index strategy.
+* DATAES-207 - Allow fetching indices by alias.
+* DATAES-192 - Define alias for document.
+* DATAES-150 - mapping are not created when entity is saved in new dynamic name index (spel).
+
+
+Changes in version 4.0.2.RELEASE (2020-07-22)
+---------------------------------------------
+* DATAES-883 - Fix log level on resource load error.
+* DATAES-878 - Wrong value for TermVector(woth_positions_offsets).
+* DATAES-865 - Fix MappingElasticsearchConverter writing an Object property containing a Map.
+* DATAES-863 - Improve server error response handling.
+* DATAES-862 - Release 4.0.2 (Neumann SR2).
+
+
+Changes in version 3.2.9.RELEASE (2020-07-22)
+---------------------------------------------
+* DATAES-861 - Release 3.2.9 (Moore SR9).
+
+
+Changes in version 3.1.19.RELEASE (2020-07-22)
+----------------------------------------------
+* DATAES-860 - Release 3.1.19 (Lovelace SR19).
+
+
+Changes in version 4.1.0-M1 (2020-06-25)
+----------------------------------------
+* DATAES-870 - Workaround for reactor-netty error.
+* DATAES-868 - Upgrade to Netty 4.1.50.Final.
+* DATAES-867 - Adopt to changes in Reactor Netty 1.0.
+* DATAES-866 - Implement suggest search in reactive client.
+* DATAES-865 - Fix MappingElasticsearchConverter writing an Object property containing a Map.
+* DATAES-863 - Improve server error response handling.
+* DATAES-859 - Don't use randomNumeric() in tests.
+* DATAES-858 - Use standard Spring code of conduct.
+* DATAES-857 - Registered simple types are not read from list.
+* DATAES-853 - Cleanup tests that do not delete test indices.
+* DATAES-852 - Upgrade to Elasticsearch 7.7.1.
+* DATAES-850 - Add warning and documentation for missing TemporalAccessor configuration.
+* DATAES-848 - Add the name of the index to SearchHit.
+* DATAES-847 - Add missing DateFormat values.
+* DATAES-845 - MappingElasticsearchConverter crashes when writing lists containing null values.
+* DATAES-844 - Improve TOC formatting for migration guides.
+* DATAES-841 - Remove deprecated type mappings code.
+* DATAES-840 - Consolidate index name SpEL resolution.
+* DATAES-839 - ReactiveElasticsearchTemplate should use RequestFactory.
+* DATAES-838 - Update to Elasticsearch 7.7.0.
+* DATAES-836 - Fix typo in Javadocs.
+* DATAES-835 - Fix code sample in documentation for scroll API.
+* DATAES-832 - findAllById repository method returns iterable with null elements for not found ids.
+* DATAES-831 - SearchOperations.searchForStream does not use requested maxResults.
+* DATAES-829 - Deprecate AbstractElasticsearchRepository and cleanup SimpleElasticsearchRepository.
+* DATAES-828 - Fields of type date need to have a format defined.
+* DATAES-827 - Repositories should not try to create an index when it already exists.
+* DATAES-826 - Add method to IndexOperations to write an index mapping from a entity class.
+* DATAES-825 - Update readme to use latest spring.io docs.
+* DATAES-824 - Release 4.1 M1 (2020.0.0).
+* DATAES-678 - Introduce ReactiveIndexOperations.
+* DATAES-263 - Inner Hits support.
+
+
+Changes in version 4.0.1.RELEASE (2020-06-10)
+---------------------------------------------
+* DATAES-857 - Registered simple types are not read from list.
+* DATAES-850 - Add warning and documentation for missing TemporalAccessor configuration.
+* DATAES-845 - MappingElasticsearchConverter crashes when writing lists containing null values.
+* DATAES-844 - Improve TOC formatting for migration guides.
+* DATAES-839 - ReactiveElasticsearchTemplate should use RequestFactory.
+* DATAES-835 - Fix code sample in documentation for scroll API.
+* DATAES-832 - findAllById repository method returns iterable with null elements for not found ids.
+* DATAES-831 - SearchOperations.searchForStream does not use requested maxResults.
+* DATAES-828 - Fields of type date need to have a format defined.
+* DATAES-827 - Repositories should not try to create an index when it already exists.
+* DATAES-823 - Release 4.0.1 (Neumann SR1).
+
+
+Changes in version 3.2.8.RELEASE (2020-06-10)
+---------------------------------------------
+* DATAES-851 - Upgrade to Elasticsearch 6.8.10.
+* DATAES-837 - Update to Elasticsearch 6.8.9.
+* DATAES-821 - Fix code for adding an alias.
+* DATAES-811 - Remove Travis CI.
+* DATAES-807 - Release 3.2.8 (Moore SR8).
+* DATAES-776 - Adapt RestClients class to change in InetSocketAddress class in JDK14.
+* DATAES-767 - Fix ReactiveElasticsearch handling of 4xx HTTP responses.
+
+
+Changes in version 3.1.18.RELEASE (2020-06-10)
+----------------------------------------------
+* DATAES-811 - Remove Travis CI.
+* DATAES-806 - Release 3.1.18 (Lovelace SR18).
+
+
+Changes in version 4.0.0.RELEASE (2020-05-12)
+---------------------------------------------
+* DATAES-822 - ElasticsearchRestTemplate should not use `spring-web`.
+* DATAES-821 - Fix code for adding an alias.
+* DATAES-819 - Test refactorings.
+* DATAES-817 - StreamQueries does only delete the last scrollid.
+* DATAES-814 - Fix documentation.
+* DATAES-812 - IndexOperations should use SpEL index name from entity.
+* DATAES-811 - Remove Travis CI.
+* DATAES-809 - Creation of test data may lead to duplicate values.
+* DATAES-808 - Release 4.0 GA (Neumann).
+* DATAES-799 - Support optimistic locking for full update scenario using seq_no + primary_term.
+* DATAES-767 - Fix ReactiveElasticsearch handling of 4xx HTTP responses.
+* DATAES-750 - Migration guide and documentation update.
+* DATAES-602 - add support for refreshAsync into ElasticsearchRestTemplate.
+* DATAES-587 - Add lifecycle events.
+* DATAES-267 - ElasticSearch should allow to create nested not analyzed fields.
+
+
+Changes in version 4.0.0.RC2 (2020-04-28)
+-----------------------------------------
+* DATAES-803 - Move count request setup from reactive template to reactive client.
+* DATAES-802 - Update documentation for using scroll API with repository methods.
+* DATAES-801 - Implement callback to enable adding custom headers in the REST HTTP request.
+* DATAES-800 - De-Lombok production code.
+* DATAES-797 - Fix MappingElasticsearchConverter recursive descent when reading Map objetcsa.
+* DATAES-795 - Fix MappingElasticsearchConverter conversion from Document into Map<String, Object>.
+* DATAES-794 - MappingBuilder must not write empty mapping properties.
+* DATAES-792 - Add java.util.Date to the supported types for Field annonation date times.
+* DATAES-791 - DocumentOperations.multiGet() implementations must return null values for  not found entities.
+* DATAES-790 - Deprecate noRefresh repository method.
+* DATAES-789 - Make ElasticsearchRestTemplate.ClientCallback public.
+* DATAES-788 - Add missing path mapping to completion context.
+* DATAES-787 - Use JDK 14 for Java.NEXT CI testing.
+* DATAES-786 - Move the creation of SearchHit(s) from ElasticsearchConverter closer to ElasticsearchTemplate.
+* DATAES-785 - Various entity callbacks implementation improvements.
+* DATAES-784 - MappingBuilder should use @Field annotation with custom value objects.
+* DATAES-782 - Make underlying TransportClient accessible.
+* DATAES-781 - Upgrade to Elasticsearch 7.6.2.
+* DATAES-778 - Fix SSL setup in the reactive client.
+* DATAES-777 - SearchHitsSupport must preserve pageable when unwrapping to AggregatedPage.
+* DATAES-776 - Adapt RestClients class to change in InetSocketAddress class in JDK14.
+* DATAES-775 - Fix test runner setup.
+* DATAES-774 - Release 4.0 RC2 (Neumann).
+* DATAES-773 - Add search-as-you-type field support to index mappings.
+* DATAES-772 - Add after-convert entity callbacks support.
+* DATAES-567 - Unable to read aggregations via Reactive*Operations.
+
+
+Changes in version 3.2.7.RELEASE (2020-04-28)
+---------------------------------------------
+* DATAES-780 - Upgrade 3.2.x to Elasticsearch 6.8.8.
+* DATAES-778 - Fix SSL setup in the reactive client.
+* DATAES-770 - Release 3.2.7 (Moore SR7).
+
+
+Changes in version 3.1.17.RELEASE (2020-04-28)
+----------------------------------------------
+* DATAES-793 - Upgrade to Elasticsearch 6.2.4.
+* DATAES-755 - Release 3.1.17 (Lovelace SR17).
+
+
+Changes in version 4.0.0.RC1 (2020-03-31)
+-----------------------------------------
+* DATAES-771 - Add after-save entity callbacks support.
+* DATAES-768 - Add missing query parameters for an UpdateQuery.
+* DATAES-766 - Replace CloseableIterator with SearchHitsIterator in stream operations.
+* DATAES-765 - Pageable.unpaged() is not used to build a query returning all documents.
+* DATAES-763 - Allow map properties in entity with null values.
+* DATAES-762 - Release 4.0 RC1 (Neumann).
+* DATAES-751 - Introduce ClientCallbackfor the rest client.
+* DATAES-653 - Make it easier to use a custom request converter when extending DefaultReactiveElasticsearchClient.
+* DATAES-435 - Report version mismatch if used with older ElasticSearch version.
+* DATAES-382 - Add Exception translation for Elasticsearch errors.
+* DATAES-68 - Add support for auditing annotations.
+
+
+Changes in version 3.2.6.RELEASE (2020-03-25)
+---------------------------------------------
+* DATAES-769 - Upgrade to Elasticsearch 6.8.7.
+* DATAES-765 - Pageable.unpaged() is not used to build a query returning all documents.
+* DATAES-764 - StreamQueries#streamResults does not clear scroll context when finished.
+* DATAES-763 - Allow map properties in entity with null values.
+* DATAES-758 - fix documentation for @Query annotation.
+* DATAES-756 - Release 3.2.6 (Moore SR6).
+
+
 Changes in version 4.0.0.M4 (2020-03-11)
 ----------------------------------------
 * DATAES-759 - Update to Elasticsearch 7.6.1.
@@ -1036,6 +1405,34 @@ Release Notes - Spring Data Elasticsearch - Version 1.0 M1 (2014-02-07)
 * #8 - java.lang.NoSuchMethodError: org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentProperty.isVersionProperty()Z
 * #7 - Missing core types in org.springframework.data.elasticsearch.annotations.FieldType
 * #6 - spirng-data-elasticsearch with elasticsearch-river-mongodb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 the original author or authors.
+ * Copyright 2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,143 +15,74 @@
  */
 package org.springframework.data.elasticsearch.core;
 
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
 import org.elasticsearch.search.aggregations.Aggregations;
 import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
-import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 /**
  * Encapsulates a list of {@link SearchHit}s with additional information from the search.
- *
+ * 
  * @param <T> the result data class.
- * @author Peter-Josef Meisch
+ * @author Sascha Woo
  * @since 4.0
  */
-public class SearchHits<T> implements Streamable<SearchHit<T>> {
-
-	private final long totalHits;
-	private final TotalHitsRelation totalHitsRelation;
-	private final float maxScore;
-	private final String scrollId;
-	private final List<? extends SearchHit<T>> searchHits;
-	private final Aggregations aggregations;
-
-	/**
-	 * @param totalHits the number of total hits for the search
-	 * @param totalHitsRelation the relation {@see TotalHitsRelation}, must not be {@literal null}
-	 * @param maxScore the maximum score
-	 * @param scrollId the scroll id if available
-	 * @param searchHits must not be {@literal null}
-	 * @param aggregations the aggregations if available
-	 */
-	public SearchHits(long totalHits, TotalHitsRelation totalHitsRelation, float maxScore, @Nullable String scrollId,
-			List<? extends SearchHit<T>> searchHits, @Nullable Aggregations aggregations) {
-
-		Assert.notNull(searchHits, "searchHits must not be null");
-
-		this.totalHits = totalHits;
-		this.totalHitsRelation = totalHitsRelation;
-		this.maxScore = maxScore;
-		this.scrollId = scrollId;
-		this.searchHits = searchHits;
-		this.aggregations = aggregations;
-	}
-
-	@SuppressWarnings("unchecked")
-	@Override
-	public Iterator<SearchHit<T>> iterator() {
-		return (Iterator<SearchHit<T>>) searchHits.iterator();
-	}
-
-	// region getter
-	/**
-	 * @return the number of total hits.
-	 */
-	public long getTotalHits() {
-		return totalHits;
-	}
-
-	/**
-	 * @return the relation for the total hits
-	 */
-	public TotalHitsRelation getTotalHitsRelation() {
-		return totalHitsRelation;
-	}
-
-	/**
-	 * @return the maximum score
-	 */
-	public float getMaxScore() {
-		return maxScore;
-	}
-
-	/**
-	 * @return the scroll id
-	 */
-	@Nullable
-	public String getScrollId() {
-		return scrollId;
-	}
-
-	/**
-	 * @return the contained {@link SearchHit}s.
-	 */
-	public List<SearchHit<T>> getSearchHits() {
-		return Collections.unmodifiableList(searchHits);
-	}
-	// endregion
-
-	// region SearchHit access
-	/**
-	 * @param index position in List.
-	 * @return the {@link SearchHit} at position {index}
-	 * @throws IndexOutOfBoundsException on invalid index
-	 */
-	public SearchHit<T> getSearchHit(int index) {
-		return searchHits.get(index);
-	}
-	// endregion
-
-	@Override
-	public String toString() {
-		return "SearchHits{" + //
-				"totalHits=" + totalHits + //
-				", totalHitsRelation=" + totalHitsRelation + //
-				", maxScore=" + maxScore + //
-				", scrollId='" + scrollId + '\'' + //
-				", searchHits={" + searchHits.size() + " elements}" + //
-				", aggregations=" + aggregations + //
-				'}';
-	}
-
-	// region aggregations
-	/**
-	 * @return true if aggregations are available
-	 */
-	public boolean hasAggregations() {
-		return aggregations != null;
-	}
+public interface SearchHits<T> extends Streamable<SearchHit<T>> {
 
 	/**
 	 * @return the aggregations.
 	 */
 	@Nullable
-	public Aggregations getAggregations() {
-		return aggregations;
-	}
-	// endregion
+	Aggregations getAggregations();
 
 	/**
-	 * Enum to represent the relation that Elasticsearch returns for the totalHits value {@see <a href=
-	 * "https://www.elastic.co/guide/en/elasticsearch/reference/7.5/search-request-body.html#request-body-search-track-total-hits">Ekasticsearch
-	 * docs</a>}
+	 * @return the maximum score
 	 */
-	public enum TotalHitsRelation {
-		EQUAL_TO, GREATER_THAN_OR_EQUAL_TO
+	float getMaxScore();
+
+	/**
+	 * @param index position in List.
+	 * @return the {@link SearchHit} at position {index}
+	 * @throws IndexOutOfBoundsException on invalid index
+	 */
+	SearchHit<T> getSearchHit(int index);
+
+	/**
+	 * @return the contained {@link SearchHit}s.
+	 */
+	List<SearchHit<T>> getSearchHits();
+
+	/**
+	 * @return the number of total hits.
+	 */
+	long getTotalHits();
+
+	/**
+	 * @return the relation for the total hits
+	 */
+	TotalHitsRelation getTotalHitsRelation();
+
+	/**
+	 * @return true if aggregations are available
+	 */
+	default boolean hasAggregations() {
+		return getAggregations() != null;
 	}
+
+	/**
+	 * @return whether the {@link SearchHits} has search hits.
+	 */
+	default boolean hasSearchHits() {
+		return !getSearchHits().isEmpty();
+	}
+
+	/**
+	 * @return an iterator for {@link SearchHit}
+	 */
+	default Iterator<SearchHit<T>> iterator() {
+		return getSearchHits().iterator();
+	}
+
 }

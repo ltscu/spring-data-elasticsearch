@@ -15,20 +15,17 @@
  */
 package org.springframework.data.elasticsearch.core;
 
-import static org.elasticsearch.index.VersionType.*;
-
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
@@ -41,50 +38,50 @@ import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
-import org.elasticsearch.client.Requests;
-import org.elasticsearch.client.core.CountRequest;
+import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.index.get.GetResult;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.query.WrapperQueryBuilder;
 import org.elasticsearch.index.reindex.BulkByScrollResponse;
 import org.elasticsearch.index.reindex.DeleteByQueryRequest;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.search.sort.FieldSortBuilder;
-import org.elasticsearch.search.sort.SortBuilders;
-import org.elasticsearch.search.sort.SortOrder;
+import org.elasticsearch.search.aggregations.Aggregation;
+import org.elasticsearch.search.suggest.Suggest;
+import org.elasticsearch.search.suggest.SuggestBuilder;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.elasticsearch.ElasticsearchException;
+import org.springframework.data.convert.EntityReader;
+import org.springframework.data.elasticsearch.BulkFailureException;
 import org.springframework.data.elasticsearch.NoSuchIndexException;
+import org.springframework.data.elasticsearch.UncategorizedElasticsearchException;
 import org.springframework.data.elasticsearch.client.reactive.ReactiveElasticsearchClient;
 import org.springframework.data.elasticsearch.core.EntityOperations.AdaptibleEntity;
-import org.springframework.data.elasticsearch.core.EntityOperations.Entity;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
 import org.springframework.data.elasticsearch.core.convert.MappingElasticsearchConverter;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.document.DocumentAdapters;
 import org.springframework.data.elasticsearch.core.document.SearchDocument;
+import org.springframework.data.elasticsearch.core.document.SearchDocumentResponse;
+import org.springframework.data.elasticsearch.core.event.ReactiveAfterConvertCallback;
+import org.springframework.data.elasticsearch.core.event.ReactiveAfterSaveCallback;
 import org.springframework.data.elasticsearch.core.event.ReactiveBeforeConvertCallback;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentEntity;
 import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentProperty;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.mapping.SimpleElasticsearchMappingContext;
 import org.springframework.data.elasticsearch.core.query.BulkOptions;
-import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
 import org.springframework.data.elasticsearch.core.query.Query;
-import org.springframework.data.elasticsearch.core.query.StringQuery;
+import org.springframework.data.elasticsearch.core.query.SeqNoPrimaryTerm;
 import org.springframework.data.elasticsearch.core.query.UpdateQuery;
+import org.springframework.data.elasticsearch.core.query.UpdateResponse;
+import org.springframework.data.elasticsearch.support.VersionInfo;
+import org.springframework.data.mapping.PersistentPropertyAccessor;
 import org.springframework.data.mapping.callback.ReactiveEntityCallbacks;
 import org.springframework.data.mapping.context.MappingContext;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
@@ -96,6 +93,9 @@ import org.springframework.util.Assert;
  * @author Peter-Josef Meisch
  * @author Mathias Teier
  * @author Aleksei Arsenev
+ * @author Roman Puchkovskiy
+ * @author Russell Parry
+ * @author Thomas Geese
  * @since 3.2
  */
 public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOperations, ApplicationContextAware {
@@ -131,6 +131,15 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		this.exceptionTranslator = new ElasticsearchExceptionTranslator();
 		this.operations = new EntityOperations(this.mappingContext);
 		this.requestFactory = new RequestFactory(converter);
+
+		logVersions();
+	}
+
+	private void logVersions() {
+		getClusterVersion() //
+				.doOnSuccess(VersionInfo::logVersions) //
+				.doOnError(e -> VersionInfo.logVersions(null)) //
+				.subscribe();
 	}
 
 	@Override
@@ -139,6 +148,32 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		if (entityCallbacks == null) {
 			setEntityCallbacks(ReactiveEntityCallbacks.create(applicationContext));
 		}
+	}
+
+	/**
+	 * Set the default {@link RefreshPolicy} to apply when writing to Elasticsearch.
+	 *
+	 * @param refreshPolicy can be {@literal null}.
+	 */
+	public void setRefreshPolicy(@Nullable RefreshPolicy refreshPolicy) {
+		this.refreshPolicy = refreshPolicy;
+	}
+
+	/**
+	 * @return the current {@link RefreshPolicy}.
+	 */
+	@Nullable
+	public RefreshPolicy getRefreshPolicy() {
+		return refreshPolicy;
+	}
+
+	/**
+	 * Set the default {@link IndicesOptions} for {@link SearchRequest search requests}.
+	 *
+	 * @param indicesOptions can be {@literal null}.
+	 */
+	public void setIndicesOptions(@Nullable IndicesOptions indicesOptions) {
+		this.indicesOptions = indicesOptions;
 	}
 
 	/**
@@ -169,12 +204,14 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 
 		Assert.notNull(entity, "Entity must not be null!");
 
-		AdaptibleEntity<T> adaptableEntity = operations.forEntity(entity, converter.getConversionService());
-
-		return doIndex(entity, adaptableEntity, index) //
+		return maybeCallBeforeConvert(entity, index)
+				.flatMap(entityAfterBeforeConversionCallback -> doIndex(entityAfterBeforeConversionCallback, index)) //
 				.map(it -> {
-					return adaptableEntity.populateIdIfNecessary(it.getId());
-				});
+					T savedEntity = it.getT1();
+					IndexResponse indexResponse = it.getT2();
+					return updateIndexedObject(savedEntity, IndexedObjectInformation.of(indexResponse.getId(),
+							indexResponse.getSeqNo(), indexResponse.getPrimaryTerm(), indexResponse.getVersion()));
+				}).flatMap(saved -> maybeCallAfterSave(saved, index));
 	}
 
 	@Override
@@ -183,32 +220,69 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	}
 
 	@Override
-	public <T> Flux<T> saveAll(Mono<? extends Collection<? extends T>> entities, IndexCoordinates index) {
+	public <T> Flux<T> saveAll(Mono<? extends Collection<? extends T>> entities, Class<T> clazz) {
+		return saveAll(entities, getIndexCoordinatesFor(clazz));
+	}
 
-		Assert.notNull(entities, "Entities must not be null!");
+	@Override
+	public <T> Flux<T> saveAll(Mono<? extends Collection<? extends T>> entitiesPublisher, IndexCoordinates index) {
 
-		return entities.flatMapMany(entityList -> {
+		Assert.notNull(entitiesPublisher, "Entities must not be null!");
 
-			List<AdaptibleEntity<? extends T>> adaptibleEntities = entityList.stream() //
-					.map(e -> operations.forEntity(e, converter.getConversionService())) //
-					.collect(Collectors.toList());
+		return entitiesPublisher //
+				.flatMapMany(entities -> Flux.fromIterable(entities) //
+						.concatMap(entity -> maybeCallBeforeConvert(entity, index)) //
+				).collectList() //
+				.map(Entities::new) //
+				.flatMapMany(entities -> {
 
-			if (adaptibleEntities.isEmpty()) {
-				return Flux.empty();
-			}
+					if (entities.isEmpty()) {
+						return Flux.empty();
+					}
 
-			Iterator<AdaptibleEntity<? extends T>> iterator = adaptibleEntities.iterator();
-			List<IndexQuery> indexRequests = adaptibleEntities.stream() //
-					.map(e -> getIndexQuery(e.getBean(), e)) //
-					.collect(Collectors.toList());
-			return doBulkOperation(indexRequests, BulkOptions.defaultOptions(), index) //
-					.map(bulkItemResponse -> {
+					return doBulkOperation(entities.indexQueries(), BulkOptions.defaultOptions(), index) //
+							.index().flatMap(indexAndResponse -> {
+								T savedEntity = entities.entityAt(indexAndResponse.getT1());
+								BulkItemResponse bulkItemResponse = indexAndResponse.getT2();
 
-						AdaptibleEntity<? extends T> mappedEntity = iterator.next();
-						mappedEntity.populateIdIfNecessary(bulkItemResponse.getResponse().getId());
-						return mappedEntity.getBean();
-					});
-		});
+								DocWriteResponse response = bulkItemResponse.getResponse();
+								updateIndexedObject(savedEntity, IndexedObjectInformation.of(response.getId(), response.getSeqNo(),
+										response.getPrimaryTerm(), response.getVersion()));
+
+								return maybeCallAfterSave(savedEntity, index);
+							});
+				});
+	}
+
+	private <T> T updateIndexedObject(T entity, IndexedObjectInformation indexedObjectInformation) {
+		AdaptibleEntity<T> adaptibleEntity = operations.forEntity(entity, converter.getConversionService());
+		adaptibleEntity.populateIdIfNecessary(indexedObjectInformation.getId());
+
+		ElasticsearchPersistentEntity<?> persistentEntity = getRequiredPersistentEntity(entity.getClass());
+		PersistentPropertyAccessor<Object> propertyAccessor = persistentEntity.getPropertyAccessor(entity);
+
+		if (indexedObjectInformation.getSeqNo() != null && indexedObjectInformation.getPrimaryTerm() != null
+				&& persistentEntity.hasSeqNoPrimaryTermProperty()) {
+			ElasticsearchPersistentProperty seqNoPrimaryTermProperty = persistentEntity.getSeqNoPrimaryTermProperty();
+			propertyAccessor.setProperty(seqNoPrimaryTermProperty,
+					new SeqNoPrimaryTerm(indexedObjectInformation.getSeqNo(), indexedObjectInformation.getPrimaryTerm()));
+		}
+
+		if (indexedObjectInformation.getVersion() != null && persistentEntity.hasVersionProperty()) {
+			ElasticsearchPersistentProperty versionProperty = persistentEntity.getVersionProperty();
+			propertyAccessor.setProperty(versionProperty, indexedObjectInformation.getVersion());
+		}
+
+		return entity;
+	}
+
+	private ElasticsearchPersistentEntity<?> getRequiredPersistentEntity(Class<?> clazz) {
+		return converter.getMappingContext().getRequiredPersistentEntity(clazz);
+	}
+
+	@Override
+	public <T> Flux<T> multiGet(Query query, Class<T> clazz) {
+		return multiGet(query, clazz, getIndexCoordinatesFor(clazz));
 	}
 
 	@Override
@@ -219,16 +293,11 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		Assert.notNull(query, "Query must not be null");
 		Assert.notEmpty(query.getIds(), "No Id define for Query");
 
-		MultiGetRequest request = requestFactory.multiGetRequest(query, index);
-		return Flux.from(execute(client -> client.multiGet(request))) //
-				.handle((result, sink) -> {
+		DocumentCallback<T> callback = new ReadDocumentCallback<>(converter, clazz, index);
 
-					Document document = DocumentAdapters.from(result);
-					T entity = converter.mapDocument(document, clazz);
-					if (entity != null) {
-						sink.next(entity);
-					}
-				});
+		MultiGetRequest request = requestFactory.multiGetRequest(query, clazz, index);
+		return Flux.from(execute(client -> client.multiGet(request))) //
+				.concatMap(result -> callback.toEntity(DocumentAdapters.from(result)));
 	}
 
 	@Override
@@ -255,7 +324,8 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	protected Flux<BulkItemResponse> doBulkOperation(List<?> queries, BulkOptions bulkOptions, IndexCoordinates index) {
 		BulkRequest bulkRequest = prepareWriteRequest(requestFactory.bulkRequest(queries, bulkOptions, index));
 		return client.bulk(bulkRequest) //
-				.onErrorMap(e -> new ElasticsearchException("Error while bulk for request: " + bulkRequest.toString(), e)) //
+				.onErrorMap(
+						e -> new UncategorizedElasticsearchException("Error while bulk for request: " + bulkRequest.toString(), e)) //
 				.flatMap(this::checkForBulkOperationFailure) //
 				.flatMapMany(response -> Flux.fromArray(response.getItems()));
 	}
@@ -270,7 +340,7 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 					failedDocuments.put(item.getId(), item.getFailureMessage());
 				}
 			}
-			ElasticsearchException exception = new ElasticsearchException(
+			BulkFailureException exception = new BulkFailureException(
 					"Bulk operation has failures. Use ElasticsearchException.getFailedDocuments() for detailed messages ["
 							+ failedDocuments + ']',
 					failedDocuments);
@@ -302,9 +372,8 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		return doExists(id, index);
 	}
 
-	private Mono<Boolean> doExists(String id, @Nullable IndexCoordinates index) {
-
-		return Mono.defer(() -> doExists(new GetRequest(index.getIndexName(), id)));
+	private Mono<Boolean> doExists(String id, IndexCoordinates index) {
+		return Mono.defer(() -> doExists(requestFactory.getRequest(id, index)));
 	}
 
 	/**
@@ -319,50 +388,48 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 				.onErrorReturn(NoSuchIndexException.class, false);
 	}
 
-	private Mono<IndexResponse> doIndex(Object value, AdaptibleEntity<?> entity, IndexCoordinates index) {
+	private <T> Mono<Tuple2<T, IndexResponse>> doIndex(T entity, IndexCoordinates index) {
 
-		return maybeCallBeforeConvert(value).flatMap(it -> {
-			IndexRequest request = getIndexRequest(value, entity, index);
-			request = prepareIndexRequest(value, request);
-			return doIndex(request);
-		});
+		IndexRequest request = requestFactory.indexRequest(getIndexQuery(entity), index);
+		request = prepareIndexRequest(entity, request);
+		return Mono.just(entity).zipWith(doIndex(request));
 	}
 
-	private IndexRequest getIndexRequest(Object value, AdaptibleEntity<?> entity, IndexCoordinates index) {
-		Object id = entity.getId();
+	private IndexQuery getIndexQuery(Object value) {
+		AdaptibleEntity<?> entity = operations.forEntity(value, converter.getConversionService());
 
-		IndexRequest request = id != null ? new IndexRequest(index.getIndexName()).id(converter.convertId(id))
-				: new IndexRequest(index.getIndexName());
-
-		request.source(converter.mapObject(value).toJson(), Requests.INDEX_CONTENT_TYPE);
-
-		if (entity.isVersionedEntity()) {
-
-			Number version = entity.getVersion();
-
-			if (version != null) {
-				request.version(version.longValue());
-				request.versionType(EXTERNAL);
-			}
-		}
-		return request;
-	}
-
-	private IndexQuery getIndexQuery(Object value, AdaptibleEntity<?> entity) {
 		Object id = entity.getId();
 		IndexQuery query = new IndexQuery();
+
 		if (id != null) {
 			query.setId(id.toString());
 		}
 		query.setObject(value);
 
-		if (entity.isVersionedEntity()) {
+		boolean usingSeqNo = false;
+
+		if (entity.hasSeqNoPrimaryTerm()) {
+			SeqNoPrimaryTerm seqNoPrimaryTerm = entity.getSeqNoPrimaryTerm();
+
+			if (seqNoPrimaryTerm != null) {
+				query.setSeqNo(seqNoPrimaryTerm.getSequenceNumber());
+				query.setPrimaryTerm(seqNoPrimaryTerm.getPrimaryTerm());
+				usingSeqNo = true;
+			}
+		}
+
+		// seq_no and version are incompatible in the same request
+		if (!usingSeqNo && entity.isVersionedEntity()) {
+
 			Number version = entity.getVersion();
 
 			if (version != null) {
 				query.setVersion(version.longValue());
 			}
 		}
+
+		query.setRouting(entity.getRouting());
+
 		return query;
 	}
 
@@ -376,14 +443,13 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 
 		Assert.notNull(id, "Id must not be null!");
 
-		return doGet(id, getPersistentEntityFor(entityType), index)
-				.map(it -> converter.mapDocument(DocumentAdapters.from(it), entityType));
+		DocumentCallback<T> callback = new ReadDocumentCallback<>(converter, entityType, index);
+
+		return doGet(id, index).flatMap(it -> callback.toEntity(DocumentAdapters.from(it)));
 	}
 
-	private Mono<GetResult> doGet(String id, ElasticsearchPersistentEntity<?> entity, IndexCoordinates index) {
-		return Mono.defer(() -> {
-			return doGet(new GetRequest(index.getIndexName(), id));
-		});
+	private Mono<GetResult> doGet(String id, IndexCoordinates index) {
+		return Mono.defer(() -> doGet(requestFactory.getRequest(id, index)));
 	}
 
 	/**
@@ -405,9 +471,17 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	@Override
 	public Mono<String> delete(Object entity, IndexCoordinates index) {
 
-		Entity<?> elasticsearchEntity = operations.forEntity(entity);
+		AdaptibleEntity<?> elasticsearchEntity = operations.forEntity(entity, converter.getConversionService());
 
-		return Mono.defer(() -> doDeleteById(converter.convertId(elasticsearchEntity.getId()), index));
+		if (elasticsearchEntity.getId() == null) {
+			return Mono.error(new IllegalArgumentException("entity must have an id"));
+		}
+
+		return Mono.defer(() -> {
+			String id = converter.convertId(elasticsearchEntity.getId());
+			String routing = elasticsearchEntity.getRouting();
+			return doDeleteById(id, routing, index);
+		});
 	}
 
 	@Override
@@ -430,14 +504,14 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		Assert.notNull(id, "id must not be null");
 		Assert.notNull(index, "index must not be null");
 
-		return doDeleteById(id, index);
+		return doDeleteById(id, null, index);
 	}
 
-	private Mono<String> doDeleteById(String id, IndexCoordinates index) {
+	private Mono<String> doDeleteById(String id, @Nullable String routing, IndexCoordinates index) {
 
 		return Mono.defer(() -> {
-
-			return doDelete(prepareDeleteRequest(new DeleteRequest(index.getIndexName(), id)));
+			DeleteRequest request = requestFactory.deleteRequest(id, routing, index);
+			return doDelete(prepareDeleteRequest(request));
 		});
 	}
 
@@ -450,8 +524,20 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 
 		Assert.notNull(query, "Query must not be null!");
 
-		return doDeleteBy(query, getPersistentEntityFor(entityType), index).map(BulkByScrollResponse::getDeleted)
-				.publishNext();
+		return doDeleteBy(query, entityType, index).map(BulkByScrollResponse::getDeleted).next();
+	}
+
+	@Override
+	public Mono<UpdateResponse> update(UpdateQuery updateQuery, IndexCoordinates index) {
+
+		Assert.notNull(updateQuery, "UpdateQuery must not be null");
+		Assert.notNull(index, "Index must not be null");
+
+		return Mono.defer(() -> {
+			UpdateRequest request = requestFactory.updateRequest(updateQuery, index);
+			return Mono.from(execute(client -> client.update(request)))
+					.map(response -> new UpdateResponse(UpdateResponse.Result.valueOf(response.getResult().name())));
+		});
 	}
 
 	@Override
@@ -459,13 +545,10 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		return delete(query, entityType, getIndexCoordinatesFor(entityType));
 	}
 
-	private Flux<BulkByScrollResponse> doDeleteBy(Query query, ElasticsearchPersistentEntity<?> entity,
-			IndexCoordinates index) {
+	private Flux<BulkByScrollResponse> doDeleteBy(Query query, Class<?> entityType, IndexCoordinates index) {
 
 		return Flux.defer(() -> {
-			DeleteByQueryRequest request = new DeleteByQueryRequest(index.getIndexNames());
-			request.setQuery(mappedQuery(query, entity));
-
+			DeleteByQueryRequest request = requestFactory.deleteByQueryRequest(query, entityType, index);
 			return doDeleteBy(prepareDeleteByRequest(request));
 		});
 	}
@@ -523,8 +606,13 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	 */
 	protected DeleteByQueryRequest prepareDeleteByRequest(DeleteByQueryRequest request) {
 
-		if (refreshPolicy != null && !RefreshPolicy.NONE.equals(refreshPolicy)) {
-			request = request.setRefresh(true);
+		if (refreshPolicy != null) {
+
+			if (RefreshPolicy.NONE.equals(refreshPolicy)) {
+				request = request.setRefresh(false);
+			} else {
+				request = request.setRefresh(true);
+			}
 		}
 
 		if (indicesOptions != null) {
@@ -568,8 +656,8 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	// region SearchOperations
 	@Override
 	public <T> Flux<SearchHit<T>> search(Query query, Class<?> entityType, Class<T> resultType, IndexCoordinates index) {
-
-		return doFind(query, entityType, index).map(searchDocument -> converter.read(resultType, searchDocument));
+		SearchDocumentCallback<T> callback = new ReadSearchDocumentCallback<>(resultType, index);
+		return doFind(query, entityType, index).concatMap(callback::toSearchHit);
 	}
 
 	@Override
@@ -577,11 +665,27 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 		return search(query, entityType, returnType, getIndexCoordinatesFor(entityType));
 	}
 
-	private Flux<SearchDocument> doFind(Query query, Class<?> clazz, IndexCoordinates index) {
+	@Override
+	public <T> Mono<SearchPage<T>> searchForPage(Query query, Class<?> entityType, Class<T> resultType) {
+		return searchForPage(query, entityType, resultType, getIndexCoordinatesFor(entityType));
+	}
 
-		if (query instanceof CriteriaQuery) {
-			converter.updateQuery((CriteriaQuery) query, clazz);
-		}
+	@Override
+	public <T> Mono<SearchPage<T>> searchForPage(Query query, Class<?> entityType, Class<T> resultType,
+			IndexCoordinates index) {
+
+		SearchDocumentCallback<T> callback = new ReadSearchDocumentCallback<>(resultType, index);
+
+		return doFindForResponse(query, entityType, index) //
+				.flatMap(searchDocumentResponse -> Flux.fromIterable(searchDocumentResponse.getSearchDocuments()) //
+						.flatMap(callback::toEntity) //
+						.collectList() //
+						.map(entities -> SearchHitMapping.mappingFor(resultType, converter) //
+								.mapHits(searchDocumentResponse, entities))) //
+				.map(searchHits -> SearchHitSupport.searchPageFor(searchHits, query.getPageable()));
+	}
+
+	private Flux<SearchDocument> doFind(Query query, Class<?> clazz, IndexCoordinates index) {
 
 		return Flux.defer(() -> {
 			SearchRequest request = requestFactory.searchRequest(query, clazz, index);
@@ -592,6 +696,50 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 			} else {
 				return doScroll(request);
 			}
+		});
+	}
+
+	private Mono<SearchDocumentResponse> doFindForResponse(Query query, Class<?> clazz, IndexCoordinates index) {
+
+		return Mono.defer(() -> {
+			SearchRequest request = requestFactory.searchRequest(query, clazz, index);
+			request = prepareSearchRequest(request);
+			return doFindForResponse(request);
+		});
+	}
+
+	@Override
+	public Flux<Aggregation> aggregate(Query query, Class<?> entityType) {
+		return aggregate(query, entityType, getIndexCoordinatesFor(entityType));
+	}
+
+	@Override
+	public Flux<Aggregation> aggregate(Query query, Class<?> entityType, IndexCoordinates index) {
+		return doAggregate(query, entityType, index);
+	}
+
+	@Override
+	public Flux<Suggest> suggest(SuggestBuilder suggestion, Class<?> entityType) {
+		return doSuggest(suggestion, getIndexCoordinatesFor(entityType));
+	}
+
+	@Override
+	public Flux<Suggest> suggest(SuggestBuilder suggestion, IndexCoordinates index) {
+		return doSuggest(suggestion, index);
+	}
+
+	private Flux<Suggest> doSuggest(SuggestBuilder suggestion, IndexCoordinates index) {
+		return Flux.defer(() -> {
+			SearchRequest request = requestFactory.searchRequest(suggestion, index);
+			return Flux.from(execute(client -> client.suggest(request)));
+		});
+	}
+
+	private Flux<Aggregation> doAggregate(Query query, Class<?> entityType, IndexCoordinates index) {
+		return Flux.defer(() -> {
+			SearchRequest request = requestFactory.searchRequest(query, entityType, index);
+			request = prepareSearchRequest(request);
+			return doAggregate(request);
 		});
 	}
 
@@ -610,47 +758,8 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 
 			SearchRequest request = requestFactory.searchRequest(query, entityType, index);
 			request = prepareSearchRequest(request);
-			request.source().size(0);
-			request.source().trackTotalHits(true);
 			return doCount(request);
 		});
-	}
-
-	private CountRequest buildCountRequest(Query query, ElasticsearchPersistentEntity<?> entity, IndexCoordinates index) {
-
-		CountRequest request = new CountRequest(index.getIndexNames());
-		SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-		searchSourceBuilder.query(mappedQuery(query, entity));
-		searchSourceBuilder.trackScores(query.getTrackScores());
-
-		QueryBuilder postFilterQuery = mappedFilterQuery(query, entity);
-		if (postFilterQuery != null) {
-			searchSourceBuilder.postFilter(postFilterQuery);
-		}
-
-		if (query.getSourceFilter() != null) {
-			searchSourceBuilder.fetchSource(query.getSourceFilter().getIncludes(), query.getSourceFilter().getExcludes());
-		}
-
-		if (query instanceof NativeSearchQuery && ((NativeSearchQuery) query).getCollapseBuilder() != null) {
-			searchSourceBuilder.collapse(((NativeSearchQuery) query).getCollapseBuilder());
-		}
-
-		sort(query, entity).forEach(searchSourceBuilder::sort);
-
-		if (query.getMinScore() > 0) {
-			searchSourceBuilder.minScore(query.getMinScore());
-		}
-
-		if (query.getIndicesOptions() != null) {
-			request.indicesOptions(query.getIndicesOptions());
-		}
-
-		if (query.getPreference() != null) {
-			request.preference(query.getPreference());
-		}
-		request.source(searchSourceBuilder);
-		return request;
 	}
 
 	/**
@@ -667,6 +776,37 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 
 		return Flux.from(execute(client -> client.search(request))).map(DocumentAdapters::from) //
 				.onErrorResume(NoSuchIndexException.class, it -> Mono.empty());
+	}
+
+	/**
+	 * Customization hook on the actual execution result {@link Mono}. <br />
+	 *
+	 * @param request the already prepared {@link SearchRequest} ready to be executed.
+	 * @return a {@link Mono} emitting the result of the operation converted to s {@link SearchDocumentResponse}.
+	 */
+	protected Mono<SearchDocumentResponse> doFindForResponse(SearchRequest request) {
+
+		if (QUERY_LOGGER.isDebugEnabled()) {
+			QUERY_LOGGER.debug("Executing doFindForResponse: {}", request);
+		}
+
+		return Mono.from(execute(client1 -> client1.searchForResponse(request))).map(SearchDocumentResponse::from);
+	}
+
+	/**
+	 * Customization hook on the actual execution result {@link Publisher}. <br />
+	 *
+	 * @param request the already prepared {@link SearchRequest} ready to be executed.
+	 * @return a {@link Flux} emitting the result of the operation.
+	 */
+	protected Flux<Aggregation> doAggregate(SearchRequest request) {
+
+		if (QUERY_LOGGER.isDebugEnabled()) {
+			QUERY_LOGGER.debug("Executing doCount: {}", request);
+		}
+
+		return Flux.from(execute(client -> client.aggregate(request))) //
+				.onErrorResume(NoSuchIndexException.class, it -> Flux.empty());
 	}
 
 	/**
@@ -701,61 +841,6 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 				.map(DocumentAdapters::from).onErrorResume(NoSuchIndexException.class, it -> Mono.empty());
 	}
 
-	@Nullable
-	private QueryBuilder mappedFilterQuery(Query query, ElasticsearchPersistentEntity<?> entity) {
-
-		if (query instanceof NativeSearchQuery) {
-			return ((NativeSearchQuery) query).getFilter();
-		}
-
-		return null;
-	}
-
-	private QueryBuilder mappedQuery(Query query, ElasticsearchPersistentEntity<?> entity) {
-
-		QueryBuilder elasticsearchQuery = null;
-
-		if (query instanceof CriteriaQuery) {
-			converter.updateQuery((CriteriaQuery) query, entity.getType());
-			elasticsearchQuery = new CriteriaQueryProcessor().createQueryFromCriteria(((CriteriaQuery) query).getCriteria());
-		} else if (query instanceof StringQuery) {
-			elasticsearchQuery = new WrapperQueryBuilder(((StringQuery) query).getSource());
-		} else if (query instanceof NativeSearchQuery) {
-			elasticsearchQuery = ((NativeSearchQuery) query).getQuery();
-		} else {
-			throw new IllegalArgumentException(String.format("Unknown query type '%s'.", query.getClass()));
-		}
-
-		return elasticsearchQuery != null ? elasticsearchQuery : QueryBuilders.matchAllQuery();
-	}
-
-	private static List<FieldSortBuilder> sort(Query query, ElasticsearchPersistentEntity<?> entity) {
-
-		if (query.getSort() == null || query.getSort().isUnsorted()) {
-			return Collections.emptyList();
-		}
-
-		List<FieldSortBuilder> mappedSort = new ArrayList<>();
-		for (Sort.Order order : query.getSort()) {
-
-			ElasticsearchPersistentProperty property = entity.getPersistentProperty(order.getProperty());
-			String fieldName = property != null ? property.getFieldName() : order.getProperty();
-
-			FieldSortBuilder sort = SortBuilders.fieldSort(fieldName)
-					.order(order.getDirection().isDescending() ? SortOrder.DESC : SortOrder.ASC);
-
-			if (order.getNullHandling() == Sort.NullHandling.NULLS_FIRST) {
-				sort.missing("_first");
-			} else if (order.getNullHandling() == Sort.NullHandling.NULLS_LAST) {
-				sort.missing("_last");
-			}
-
-			mappedSort.add(sort);
-		}
-
-		return mappedSort;
-	}
-
 	/**
 	 * Customization hook to modify a generated {@link SearchRequest} prior to its execution. Eg. by setting the
 	 * {@link SearchRequest#indicesOptions(IndicesOptions) indices options} if applicable.
@@ -775,42 +860,38 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	// endregion
 
 	// region Helper methods
-	// Property Setters / Getters
-
-	/**
-	 * Set the default {@link RefreshPolicy} to apply when writing to Elasticsearch.
-	 *
-	 * @param refreshPolicy can be {@literal null}.
-	 */
-	public void setRefreshPolicy(@Nullable RefreshPolicy refreshPolicy) {
-		this.refreshPolicy = refreshPolicy;
+	protected Mono<String> getClusterVersion() {
+		try {
+			return Mono.from(execute(client -> client.info())).map(mainResponse -> mainResponse.getVersion().toString());
+		} catch (Exception ignored) {}
+		return Mono.empty();
 	}
 
-	/**
-	 * Set the default {@link IndicesOptions} for {@link SearchRequest search requests}.
-	 *
-	 * @param indicesOptions can be {@literal null}.
-	 */
-	public void setIndicesOptions(@Nullable IndicesOptions indicesOptions) {
-		this.indicesOptions = indicesOptions;
-	}
+	// endregion
 
-	/*
-	 * (non-Javadoc)
-	 * @see org.springframework.data.elasticsearch.core.ReactiveElasticsearchOperations#exctute(ClientCallback)
-	 */
 	@Override
 	public <T> Publisher<T> execute(ClientCallback<Publisher<T>> callback) {
 		return Flux.defer(() -> callback.doWithClient(getClient())).onErrorMap(this::translateException);
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see org.springframework.data.elasticsearch.core.ReactiveElasticsearchOperations#getElasticsearchConverter()
-	 */
+	@Override
+	public <T> Publisher<T> executeWithIndicesClient(IndicesClientCallback<Publisher<T>> callback) {
+		return Flux.defer(() -> callback.doWithClient(getIndicesClient())).onErrorMap(this::translateException);
+	}
+
 	@Override
 	public ElasticsearchConverter getElasticsearchConverter() {
 		return converter;
+	}
+
+	@Override
+	public ReactiveIndexOperations indexOps(IndexCoordinates index) {
+		return new DefaultReactiveIndexOperations(this, index);
+	}
+
+	@Override
+	public ReactiveIndexOperations indexOps(Class<?> clazz) {
+		return new DefaultReactiveIndexOperations(this, clazz);
 	}
 
 	@Override
@@ -831,6 +912,20 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	 */
 	protected ReactiveElasticsearchClient getClient() {
 		return this.client;
+	}
+
+	/**
+	 * Obtain the {@link ReactiveElasticsearchClient.Indices} to operate upon.
+	 *
+	 * @return never {@literal null}.
+	 */
+	protected ReactiveElasticsearchClient.Indices getIndicesClient() {
+
+		if (client instanceof ReactiveElasticsearchClient.Indices) {
+			return (ReactiveElasticsearchClient.Indices) client;
+		}
+
+		throw new UncategorizedElasticsearchException("No ReactiveElasticsearchClient.Indices implementation available");
 	}
 
 	// endregion
@@ -854,13 +949,117 @@ public class ReactiveElasticsearchTemplate implements ReactiveElasticsearchOpera
 	}
 
 	// region callbacks
-	protected <T> Mono<T> maybeCallBeforeConvert(T entity) {
+	protected <T> Mono<T> maybeCallBeforeConvert(T entity, IndexCoordinates index) {
 
 		if (null != entityCallbacks) {
-			return entityCallbacks.callback(ReactiveBeforeConvertCallback.class, entity);
+			return entityCallbacks.callback(ReactiveBeforeConvertCallback.class, entity, index);
+		}
+
+		return Mono.just(entity);
+	}
+
+	protected <T> Mono<T> maybeCallAfterSave(T entity, IndexCoordinates index) {
+
+		if (null != entityCallbacks) {
+			return entityCallbacks.callback(ReactiveAfterSaveCallback.class, entity, index);
+		}
+
+		return Mono.just(entity);
+	}
+
+	protected <T> Mono<T> maybeCallAfterConvert(T entity, Document document, IndexCoordinates index) {
+
+		if (null != entityCallbacks) {
+			return entityCallbacks.callback(ReactiveAfterConvertCallback.class, entity, document, index);
 		}
 
 		return Mono.just(entity);
 	}
 	// endregion
+
+	protected interface DocumentCallback<T> {
+
+		@NonNull
+		Mono<T> toEntity(@Nullable Document document);
+	}
+
+	protected class ReadDocumentCallback<T> implements DocumentCallback<T> {
+		private final EntityReader<? super T, Document> reader;
+		private final Class<T> type;
+		private final IndexCoordinates index;
+
+		public ReadDocumentCallback(EntityReader<? super T, Document> reader, Class<T> type, IndexCoordinates index) {
+			Assert.notNull(reader, "reader is null");
+			Assert.notNull(type, "type is null");
+
+			this.reader = reader;
+			this.type = type;
+			this.index = index;
+		}
+
+		@NonNull
+		public Mono<T> toEntity(@Nullable Document document) {
+			if (document == null) {
+				return Mono.empty();
+			}
+
+			T entity = reader.read(type, document);
+			return maybeCallAfterConvert(entity, document, index);
+		}
+	}
+
+	protected interface SearchDocumentCallback<T> {
+
+		@NonNull
+		Mono<T> toEntity(@NonNull SearchDocument response);
+
+		@NonNull
+		Mono<SearchHit<T>> toSearchHit(@NonNull SearchDocument response);
+	}
+
+	protected class ReadSearchDocumentCallback<T> implements SearchDocumentCallback<T> {
+		private final DocumentCallback<T> delegate;
+		private final Class<T> type;
+
+		public ReadSearchDocumentCallback(Class<T> type, IndexCoordinates index) {
+			Assert.notNull(type, "type is null");
+
+			this.delegate = new ReadDocumentCallback<>(converter, type, index);
+			this.type = type;
+		}
+
+		@Override
+		public Mono<T> toEntity(SearchDocument response) {
+			return delegate.toEntity(response);
+		}
+
+		@Override
+		public Mono<SearchHit<T>> toSearchHit(SearchDocument response) {
+			return toEntity(response).map(entity -> SearchHitMapping.mappingFor(type, converter).mapHit(response, entity));
+		}
+	}
+
+	private class Entities<T> {
+		private final List<T> entities;
+
+		private Entities(List<T> entities) {
+			Assert.notNull(entities, "entities cannot be null");
+
+			this.entities = entities;
+		}
+
+		private boolean isEmpty() {
+			return entities.isEmpty();
+		}
+
+		private List<IndexQuery> indexQueries() {
+			return entities.stream().map(ReactiveElasticsearchTemplate.this::getIndexQuery).collect(Collectors.toList());
+		}
+
+		private T entityAt(long index) {
+			// it's safe to cast to int because the original indexed colleciton was fitting in memory
+			int intIndex = (int) index;
+			return entities.get(intIndex);
+		}
+	}
 }

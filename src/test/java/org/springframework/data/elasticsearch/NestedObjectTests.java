@@ -15,9 +15,9 @@
  */
 package org.springframework.data.elasticsearch;
 
-import static org.apache.commons.lang.RandomStringUtils.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.elasticsearch.index.query.QueryBuilders.*;
+import static org.springframework.data.elasticsearch.utils.IdGenerator.*;
 
 import lombok.Data;
 import lombok.Getter;
@@ -30,11 +30,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +50,7 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
-import org.springframework.data.elasticsearch.junit.jupiter.ElasticsearchTemplateConfiguration;
+import org.springframework.data.elasticsearch.junit.jupiter.ElasticsearchRestTemplateConfiguration;
 import org.springframework.data.elasticsearch.junit.jupiter.SpringIntegrationTest;
 import org.springframework.data.elasticsearch.utils.IndexInitializer;
 import org.springframework.test.context.ContextConfiguration;
@@ -63,16 +63,21 @@ import org.springframework.test.context.ContextConfiguration;
  * @author Mark Paluch
  */
 @SpringIntegrationTest
-@ContextConfiguration(classes = { ElasticsearchTemplateConfiguration.class })
+@ContextConfiguration(classes = { ElasticsearchRestTemplateConfiguration.class })
 public class NestedObjectTests {
 
 	@Autowired private ElasticsearchOperations operations;
 
+	private final List<Class<?>> entityClasses = Arrays.asList(Book.class, Person.class, PersonMultipleLevelNested.class);
+
 	@BeforeEach
 	public void before() {
-		IndexInitializer.init(operations.indexOps(Book.class));
-		IndexInitializer.init(operations.indexOps(Person.class));
-		IndexInitializer.init(operations.indexOps(PersonMultipleLevelNested.class));
+		entityClasses.stream().map(operations::indexOps).forEach(IndexInitializer::init);
+	}
+
+	@AfterEach
+	void tearDown() {
+		entityClasses.forEach(clazz -> operations.indexOps(clazz).delete());
 	}
 
 	@Test
@@ -122,7 +127,7 @@ public class NestedObjectTests {
 		indexQueries.add(indexQuery1);
 		indexQueries.add(indexQuery2);
 
-		IndexCoordinates index = IndexCoordinates.of("test-index-person").withTypes("user");
+		IndexCoordinates index = IndexCoordinates.of("test-index-person");
 		operations.bulkIndex(indexQueries, index);
 		operations.indexOps(Person.class).refresh();
 
@@ -142,13 +147,12 @@ public class NestedObjectTests {
 		List<IndexQuery> indexQueries = createPerson();
 
 		// when
-		operations.bulkIndex(indexQueries,
-				IndexCoordinates.of("test-index-person-multiple-level-nested").withTypes("user"));
+		operations.bulkIndex(indexQueries, IndexCoordinates.of("test-index-person-multiple-level-nested"));
 		operations.indexOps(PersonMultipleLevelNested.class).refresh();
 
 		// then
 		PersonMultipleLevelNested personIndexed = operations.get("1", PersonMultipleLevelNested.class,
-				IndexCoordinates.of("test-index-person-multiple-level-nested").withTypes("user"));
+				IndexCoordinates.of("test-index-person-multiple-level-nested"));
 		assertThat(personIndexed).isNotNull();
 	}
 
@@ -159,8 +163,7 @@ public class NestedObjectTests {
 		List<IndexQuery> indexQueries = createPerson();
 
 		// when
-		operations.bulkIndex(indexQueries,
-				IndexCoordinates.of("test-index-person-multiple-level-nested").withTypes("user"));
+		operations.bulkIndex(indexQueries, IndexCoordinates.of("test-index-person-multiple-level-nested"));
 
 		// then
 		Map<String, Object> mapping = operations.indexOps(PersonMultipleLevelNested.class).getMapping();
@@ -179,7 +182,7 @@ public class NestedObjectTests {
 		List<IndexQuery> indexQueries = createPerson();
 
 		// when
-		IndexCoordinates index = IndexCoordinates.of("test-index-person-multiple-level-nested").withTypes("user");
+		IndexCoordinates index = IndexCoordinates.of("test-index-person-multiple-level-nested");
 		operations.bulkIndex(indexQueries, index);
 		operations.indexOps(PersonMultipleLevelNested.class).refresh();
 
@@ -319,7 +322,7 @@ public class NestedObjectTests {
 		indexQueries.add(indexQuery1);
 		indexQueries.add(indexQuery2);
 
-		IndexCoordinates index = IndexCoordinates.of("test-index-person").withTypes("user");
+		IndexCoordinates index = IndexCoordinates.of("test-index-person");
 		operations.bulkIndex(indexQueries, index);
 		operations.indexOps(Person.class).refresh();
 
@@ -340,10 +343,10 @@ public class NestedObjectTests {
 		Book book1 = new Book();
 		Book book2 = new Book();
 
-		book1.setId(randomNumeric(5));
+		book1.setId(nextIdAsString());
 		book1.setName("testBook1");
 
-		book2.setId(randomNumeric(5));
+		book2.setId(nextIdAsString());
 		book2.setName("testBook2");
 
 		Map<Integer, Collection<String>> map1 = new HashMap<>();
@@ -368,7 +371,7 @@ public class NestedObjectTests {
 		indexQueries.add(indexQuery2);
 
 		// when
-		IndexCoordinates index = IndexCoordinates.of("test-index-book-nested-objects").withTypes("book");
+		IndexCoordinates index = IndexCoordinates.of("test-index-book-nested-objects");
 		operations.bulkIndex(indexQueries, index);
 		operations.indexOps(Book.class).refresh();
 

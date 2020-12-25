@@ -26,12 +26,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
 import org.springframework.data.elasticsearch.core.aggregation.impl.AggregatedPageImpl;
 import org.springframework.data.repository.util.ReactiveWrappers;
+import org.springframework.data.util.CloseableIterator;
 import org.springframework.lang.Nullable;
 
 /**
  * Utility class with helper methods for working with {@link SearchHit}.
  * 
  * @author Peter-Josef Meisch
+ * @author Sascha Woo
+ * @author Roman Puchkovskiy
  * @since 4.0
  */
 public final class SearchHitSupport {
@@ -45,7 +48,8 @@ public final class SearchHitSupport {
 	 * @return a corresponding object where the SearchHits are replaced by their content if possible, otherwise the
 	 *         original object
 	 */
-	public static Object unwrapSearchHits(Object result) {
+	@Nullable
+	public static Object unwrapSearchHits(@Nullable Object result) {
 
 		if (result == null) {
 			return result;
@@ -64,8 +68,8 @@ public final class SearchHitSupport {
 		if (result instanceof AggregatedPage<?>) {
 			AggregatedPage<?> page = (AggregatedPage<?>) result;
 			List<?> list = page.getContent().stream().map(SearchHitSupport::unwrapSearchHits).collect(Collectors.toList());
-			return new AggregatedPageImpl<>(list, null, page.getTotalElements(), page.getAggregations(), page.getScrollId(),
-					page.getMaxScore());
+			return new AggregatedPageImpl<>(list, page.getPageable(), page.getTotalElements(), page.getAggregations(),
+					page.getScrollId(), page.getMaxScore());
 
 		}
 
@@ -76,6 +80,10 @@ public final class SearchHitSupport {
 		if (result instanceof SearchHits<?>) {
 			SearchHits<?> searchHits = (SearchHits<?>) result;
 			return unwrapSearchHits(searchHits.getSearchHits());
+		}
+
+		if (result instanceof SearchHitsIterator<?>) {
+			return unwrapSearchHitsIterator((SearchHitsIterator<?>) result);
 		}
 
 		if (ReactiveWrappers.isAvailable(ReactiveWrappers.ReactiveLibrary.PROJECT_REACTOR)) {
@@ -89,16 +97,43 @@ public final class SearchHitSupport {
 		return result;
 	}
 
+	private static CloseableIterator<?> unwrapSearchHitsIterator(SearchHitsIterator<?> iterator) {
+
+		return new CloseableIterator<Object>() {
+			@Override
+			public boolean hasNext() {
+				return iterator.hasNext();
+			}
+
+			@Override
+			public Object next() {
+				return unwrapSearchHits(iterator.next());
+			}
+
+			@Override
+			public void close() {
+				iterator.close();
+			}
+		};
+	}
+
 	/**
 	 * Builds an {@link AggregatedPage} with the {@link SearchHit} objects from a {@link SearchHits} object.
 	 * 
 	 * @param searchHits, must not be {@literal null}.
 	 * @param pageable, must not be {@literal null}.
 	 * @return the created Page
+	 * @deprecated since 4.0, will be removed in a future version.
 	 */
+	@Deprecated
 	public static <T> AggregatedPage<SearchHit<T>> page(SearchHits<T> searchHits, Pageable pageable) {
-		return new AggregatedPageImpl<>(searchHits.getSearchHits(), pageable, searchHits.getTotalHits(),
-				searchHits.getAggregations(), searchHits.getScrollId(), searchHits.getMaxScore());
+		return new AggregatedPageImpl<>( //
+				searchHits.getSearchHits(), //
+				pageable, //
+				searchHits.getTotalHits(), //
+				searchHits.getAggregations(), //
+				null, //
+				searchHits.getMaxScore());
 	}
 
 	public static <T> SearchPage<T> searchPageFor(SearchHits<T> searchHits, @Nullable Pageable pageable) {
@@ -122,6 +157,14 @@ public final class SearchHitSupport {
 		@Override
 		public SearchHits<T> getSearchHits() {
 			return searchHits;
+		}
+
+		/*
+		 * return the same instance as in getSearchHits().getSearchHits()
+		 */
+		@Override
+		public List<SearchHit<T>> getContent() {
+			return searchHits.getSearchHits();
 		}
 	}
 }

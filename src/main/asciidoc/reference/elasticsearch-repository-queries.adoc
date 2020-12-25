@@ -8,12 +8,14 @@ The Elasticsearch module supports all basic query building feature as string que
 
 === Declared queries
 
-Deriving the query from the method name is not always sufficient and/or may result in unreadable method names. In this case one might make use of the `@Query` annotation (see <<elasticsearch.query-methods.at-query>> ).
+Deriving the query from the method name is not always sufficient and/or may result in unreadable method names.
+In this case one might make use of the `@Query` annotation (see <<elasticsearch.query-methods.at-query>> ).
 
 [[elasticsearch.query-methods.criterions]]
 == Query creation
 
-Generally the query creation mechanism for Elasticsearch works as described in <<repositories.query-methods>>. Here's a short example of what a Elasticsearch query method translates into:
+Generally the query creation mechanism for Elasticsearch works as described in <<repositories.query-methods>>.
+Here's a short example of what a Elasticsearch query method translates into:
 
 .Query creation from method names
 ====
@@ -43,20 +45,22 @@ The method name above will be translated into the following Elasticsearch json q
 
 A list of supported keywords for Elasticsearch is shown below.
 
-[cols="1,2,3", options="header"]
+[cols="1,2,3",options="header"]
 .Supported keywords inside method names
 |===
 | Keyword
 | Sample
-| Elasticsearch Query String| `And`
+| Elasticsearch Query String
+
+| `And`
 | `findByNameAndPrice`
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "?", "fields" : [ "name" ] } },
-      { "query_string" : { "query" : "?", "fields" : [ "price" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "?", "fields" : [ "name" ] } },
+{ "query_string" : { "query" : "?", "fields" : [ "price" ] } }
+]
+}
 }}`
 
 | `Or`
@@ -64,10 +68,10 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "should" : [
-      { "query_string" : { "query" : "?", "fields" : [ "name" ] } },
-      { "query_string" : { "query" : "?", "fields" : [ "price" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "?", "fields" : [ "name" ] } },
+{ "query_string" : { "query" : "?", "fields" : [ "price" ] } }
+]
+}
 }}`
 
 | `Is`
@@ -75,9 +79,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "?", "fields" : [ "name" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "?", "fields" : [ "name" ] } }
+]
+}
 }}`
 
 | `Not`
@@ -85,9 +89,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must_not" : [
-      { "query_string" : { "query" : "?", "fields" : [ "name" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "?", "fields" : [ "name" ] } }
+]
+}
 }}`
 
 | `Between`
@@ -95,9 +99,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : ?, "to" : ?, "include_lower" : true, "include_upper" : true } } }
-    ]
-  }
+{"range" : {"price" : {"from" : ?, "to" : ?, "include_lower" : true, "include_upper" : true } } }
+]
+}
 }}`
 
 | `LessThan`
@@ -105,9 +109,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : null, "to" : ?, "include_lower" : true, "include_upper" : false } } }
-    ]
-  }
+{"range" : {"price" : {"from" : null, "to" : ?, "include_lower" : true, "include_upper" : false } } }
+]
+}
 }}`
 
 | `LessThanEqual`
@@ -115,9 +119,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : null, "to" : ?, "include_lower" : true, "include_upper" : true } } }
-    ]
-  }
+{"range" : {"price" : {"from" : null, "to" : ?, "include_lower" : true, "include_upper" : true } } }
+]
+}
 }}`
 
 | `GreaterThan`
@@ -125,9 +129,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : ?, "to" : null, "include_lower" : false, "include_upper" : true } } }
-    ]
-  }
+{"range" : {"price" : {"from" : ?, "to" : null, "include_lower" : false, "include_upper" : true } } }
+]
+}
 }}`
 
 
@@ -136,9 +140,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : ?, "to" : null, "include_lower" : true, "include_upper" : true } } }
-    ]
-  }
+{"range" : {"price" : {"from" : ?, "to" : null, "include_lower" : true, "include_upper" : true } } }
+]
+}
 }}`
 
 | `Before`
@@ -146,9 +150,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : null, "to" : ?, "include_lower" : true, "include_upper" : true } } }
-    ]
-  }
+{"range" : {"price" : {"from" : null, "to" : ?, "include_lower" : true, "include_upper" : true } } }
+]
+}
 }}`
 
 | `After`
@@ -156,9 +160,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-    {"range" : {"price" : {"from" : ?, "to" : null, "include_lower" : true, "include_upper" : true } } }
-    ]
-  }
+{"range" : {"price" : {"from" : ?, "to" : null, "include_lower" : true, "include_upper" : true } } }
+]
+}
 }}`
 
 | `Like`
@@ -166,9 +170,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "?*", "fields" : [ "name" ] }, "analyze_wildcard": true }
-    ]
-  }
+{ "query_string" : { "query" : "?*", "fields" : [ "name" ] }, "analyze_wildcard": true }
+]
+}
 }}`
 
 | `StartingWith`
@@ -176,9 +180,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "?*", "fields" : [ "name" ] }, "analyze_wildcard": true }
-    ]
-  }
+{ "query_string" : { "query" : "?*", "fields" : [ "name" ] }, "analyze_wildcard": true }
+]
+}
 }}`
 
 | `EndingWith`
@@ -186,9 +190,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "*?", "fields" : [ "name" ] }, "analyze_wildcard": true }
-    ]
-  }
+{ "query_string" : { "query" : "*?", "fields" : [ "name" ] }, "analyze_wildcard": true }
+]
+}
 }}`
 
 | `Contains/Containing`
@@ -196,38 +200,47 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "\*?*", "fields" : [ "name" ] }, "analyze_wildcard": true }
-    ]
-  }
+{ "query_string" : { "query" : "\*?*", "fields" : [ "name" ] }, "analyze_wildcard": true }
+]
+}
 }}`
 
-| `In`
+| `In` (when annotated as FieldType.Keyword)
 | `findByNameIn(Collection<String>names)`
 | `{ "query" : {
 "bool" : {
 "must" : [
-      {"bool" : {"must" : [
-            {"terms" : {"name" : ["?","?"]}}
-          ]
-        }
-      }
-    ]
-  }
+{"bool" : {"must" : [
+{"terms" : {"name" : ["?","?"]}}
+]
+}
+}
+]
+}
 }}`
 
-| `NotIn`
+
+| `In`
+| `findByNameIn(Collection<String>names)`
+| `{ "query": {"bool": {"must": [{"query_string":{"query": "\"?\" \"?\"", "fields": ["name"]}}]}}}`
+
+| `NotIn`  (when annotated as FieldType.Keyword)
 | `findByNameNotIn(Collection<String>names)`
 | `{ "query" : {
 "bool" : {
 "must" : [
-      {"bool" : {"must_not" : [
-            {"terms" : {"name" : ["?","?"]}}
-          ]
-        }
-      }
-    ]
-  }
+{"bool" : {"must_not" : [
+{"terms" : {"name" : ["?","?"]}}
+]
+}
+}
+]
+}
 }}`
+
+| `NotIn`
+| `findByNameNotIn(Collection<String>names)`
+| `{"query": {"bool": {"must": [{"query_string": {"query": "NOT(\"?\" \"?\")", "fields": ["name"]}}]}}}`
 
 | `Near`
 | `findByStoreNear`
@@ -238,9 +251,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "true", "fields" : [ "available" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "true", "fields" : [ "available" ] } }
+]
+}
 }}`
 
 | `False`
@@ -248,9 +261,9 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "false", "fields" : [ "available" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "false", "fields" : [ "available" ] } }
+]
+}
 }}`
 
 | `OrderBy`
@@ -258,13 +271,16 @@ A list of supported keywords for Elasticsearch is shown below.
 | `{ "query" : {
 "bool" : {
 "must" : [
-      { "query_string" : { "query" : "true", "fields" : [ "available" ] } }
-    ]
-  }
+{ "query_string" : { "query" : "true", "fields" : [ "available" ] } }
+]
+}
 }, "sort":[{"name":{"order":"desc"}}]
 }`
 
 |===
+
+NOTE: Methods names to build Geo-shape queries taking `GeoJson` parameters are not supported.
+Use `ElasticsearchOperations` with `CriteriaQuery` in a custom repository implementation if you need to have such a function in a repository.
 
 == Method return types
 
@@ -273,7 +289,7 @@ Repository methods can be defined to have the following return types for returni
 * `List<T>`
 * `Stream<T>`
 * `SearchHits<T>`
-* `List<SearchHits<T>>`
+* `List<SearchHit<T>>`
 * `Stream<SearchHit<T>>`
 * `SearchPage<T>`
 
@@ -289,7 +305,10 @@ interface BookRepository extends ElasticsearchRepository<Book, String> {
     Page<Book> findByName(String name,Pageable pageable);
 }
 ----
-The String that is set as the annotation argument must be a valid Elasticsearch JSON query. It will be sent to Easticsearch as value of the query element; if for example the function is called with the parameter _John_, it would produce the following query body:
+
+The String that is set as the annotation argument must be a valid Elasticsearch JSON query.
+It will be sent to Easticsearch as value of the query element; if for example the function is called with the parameter _John_, it would produce the following query body:
+
 [source,json]
 ----
 {

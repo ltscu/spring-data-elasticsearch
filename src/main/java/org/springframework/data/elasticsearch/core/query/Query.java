@@ -22,6 +22,7 @@ import java.util.Optional;
 
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -197,7 +198,7 @@ public interface Query {
 
 	/**
 	 * Sets the {@link HighlightQuery}.
-	 * 
+	 *
 	 * @param highlightQuery the query to set
 	 * @since 4.0
 	 */
@@ -215,11 +216,11 @@ public interface Query {
 	 * Sets the flag whether to set the Track_total_hits parameter on queries {@see <a href=
 	 * "https://www.elastic.co/guide/en/elasticsearch/reference/7.0/search-request-track-total-hits.html">Elasticseacrh
 	 * documentation</>}
-	 * 
+	 *
 	 * @param trackTotalHits the value to set.
 	 * @since 4.0
 	 */
-	void setTrackTotalHits(boolean trackTotalHits);
+	void setTrackTotalHits(@Nullable Boolean trackTotalHits);
 
 	/**
 	 * Sets the flag whether to set the Track_total_hits parameter on queries {@see <a href=
@@ -229,11 +230,30 @@ public interface Query {
 	 * @return the set value.
 	 * @since 4.0
 	 */
-	boolean getTrackTotalHits();
+	@Nullable
+	Boolean getTrackTotalHits();
 
 	/**
-	 * For queries that are used in delete request, these are internally handled by Elasticsearch as scroll/bulk delete queries.
-	 * 
+	 * Sets the maximum value up to which total hits are tracked. Only relevant if #getTrackTotalHits is {@literal null}
+	 *
+	 * @param trackTotalHitsUpTo max limit for trackTotalHits
+	 * @since 4.1
+	 */
+	void setTrackTotalHitsUpTo(@Nullable Integer trackTotalHitsUpTo);
+
+	/**
+	 * Gets the maximum value up to which total hits are tracked. Only relevant if #getTrackTotalHits is {@literal null}
+	 *
+	 * @return max limit for trackTotalHits
+	 * @since 4.1
+	 */
+	@Nullable
+	Integer getTrackTotalHitsUpTo();
+
+	/**
+	 * For queries that are used in delete request, these are internally handled by Elasticsearch as scroll/bulk delete
+	 * queries. Must not return {@literal null} when {@link #hasScrollTime()} returns {@literal true}.
+	 *
 	 * @return the scrolltime settings
 	 * @since 4.0
 	 */
@@ -241,8 +261,9 @@ public interface Query {
 	Duration getScrollTime();
 
 	/**
-	 * For queries that are used in delete request, these are internally handled by Elasticsearch as scroll/bulk delete queries.
-	 * 
+	 * For queries that are used in delete request, these are internally handled by Elasticsearch as scroll/bulk delete
+	 * queries.
+	 *
 	 * @param scrollTime the scrolltime settings
 	 * @since 4.0
 	 */
@@ -255,4 +276,13 @@ public interface Query {
 	default boolean hasScrollTime() {
 		return getScrollTime() != null;
 	}
+
+	/**
+	 * Get the query timeout.
+	 *
+	 * @return null if not set
+	 * @since 4.2
+	 */
+	@Nullable
+	TimeValue getTimeout();
 }

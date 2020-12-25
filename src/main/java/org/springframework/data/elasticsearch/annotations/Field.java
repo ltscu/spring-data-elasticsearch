@@ -33,9 +33,10 @@ import org.springframework.core.annotation.AliasFor;
  * @author Kevin Leturc
  * @author Peter-Josef Meisch
  * @author Xiao Yu
+ * @author Aleksei Arsenev
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.FIELD)
+@Target({ ElementType.FIELD, ElementType.ANNOTATION_TYPE })
 @Documented
 @Inherited
 public @interface Field {
@@ -148,4 +149,40 @@ public @interface Field {
 	 * @since 4.0
 	 */
 	double scalingFactor() default 1;
+
+	/**
+	 * @since 4.0
+	 */
+	int maxShingleSize() default -1;
+
+	/**
+	 * if true, the field will be stored in Elasticsearch even if it has a null value
+	 * 
+	 * @since 4.1
+	 */
+	boolean storeNullValue() default false;
+
+	/**
+	 * to be used in combination with {@link FieldType#Rank_Feature}
+	 * 
+	 * @since 4.1
+	 */
+	boolean positiveScoreImpact() default true;
+
+	/**
+	 * to be used in combination with {@link FieldType#Object}
+	 *
+	 * @since 4.1
+	 */
+	boolean enabled() default true;
+
+	/**
+	 * @since 4.1
+	 */
+	boolean eagerGlobalOrdinals() default false;
+
+	/**
+	 * @since 4.1
+	 */
+	NullValueType nullValueType() default NullValueType.String;
 }

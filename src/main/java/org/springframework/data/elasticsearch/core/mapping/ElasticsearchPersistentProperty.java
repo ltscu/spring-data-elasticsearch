@@ -28,6 +28,7 @@ import org.springframework.lang.Nullable;
  * @author Sascha Woo
  * @author Oliver Gierke
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
  */
 public interface ElasticsearchPersistentProperty extends PersistentProperty<ElasticsearchPersistentProperty> {
 
@@ -42,8 +43,8 @@ public interface ElasticsearchPersistentProperty extends PersistentProperty<Elas
 	 * Returns whether the current property is a <em>potential</em> score property of the owning
 	 * {@link ElasticsearchPersistentEntity}. This method is mainly used by {@link ElasticsearchPersistentEntity}
 	 * implementation to discover score property candidates on {@link ElasticsearchPersistentEntity} creation you should
-	 * rather call {@link ElasticsearchPersistentEntity#getScoreProperty()} to determine whether the
-	 * current property is the score property of that {@link ElasticsearchPersistentEntity} under consideration.
+	 * rather call {@link ElasticsearchPersistentEntity#getScoreProperty()} to determine whether the current property is
+	 * the score property of that {@link ElasticsearchPersistentEntity} under consideration.
 	 *
 	 * @return
 	 * @since 3.1
@@ -61,8 +62,18 @@ public interface ElasticsearchPersistentProperty extends PersistentProperty<Elas
 	 *
 	 * @return
 	 * @since 3.1
+	 * @deprecated since 4.1, not supported anymore by Elasticsearch
 	 */
+	@Deprecated
 	boolean isParentProperty();
+
+	/**
+	 * Returns whether the current property is a {@link SeqNoPrimaryTerm} property.
+	 *
+	 * @return true if the type is {@link SeqNoPrimaryTerm}
+	 * @since 4.0
+	 */
+	boolean isSeqNoPrimaryTermProperty();
 
 	/**
 	 * @return true if an {@link ElasticsearchPersistentPropertyConverter} is available for this instance.
@@ -76,6 +87,58 @@ public interface ElasticsearchPersistentProperty extends PersistentProperty<Elas
 	 */
 	@Nullable
 	ElasticsearchPersistentPropertyConverter getPropertyConverter();
+
+	/**
+	 * Returns true if the property may be read.
+	 *
+	 * @return true if readable, false otherwise
+	 * @since 4.0
+	 */
+	boolean isReadable();
+
+	/**
+	 * @return {@literal true} if null values should be stored in Elasticsearch
+	 * @since 4.1
+	 */
+	boolean storeNullValue();
+
+	/**
+	 * @return {@literal true} if this is a GeoPoint property
+	 * @since 4.1
+	 */
+	boolean isGeoPointProperty();
+
+	/**
+	 * @return {@literal true} if this is a GeoShape property
+	 * @since 4.1
+	 */
+	boolean isGeoShapeProperty();
+
+	/**
+	 * @return {@literal true} if this is a JoinField property
+	 * @since 4.1
+	 */
+	boolean isJoinFieldProperty();
+
+	/**
+	 * @return {@literal true} if this is a Completion property
+	 * @since 4.1
+	 */
+	boolean isCompletionProperty();
+
+	/**
+	 * calls {@link #getActualType()} but returns null when an exception is thrown
+	 * 
+	 * @since 4.1
+	 */
+	@Nullable
+	default Class<?> getActualTypeOrNull() {
+		try {
+			return getActualType();
+		} catch (Exception e) {
+			return null;
+		}
+	}
 
 	enum PropertyToFieldNameConverter implements Converter<ElasticsearchPersistentProperty, String> {
 

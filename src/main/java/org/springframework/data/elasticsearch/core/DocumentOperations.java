@@ -16,7 +16,6 @@
 package org.springframework.data.elasticsearch.core;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.BulkOptions;
@@ -120,8 +119,18 @@ public interface DocumentOperations {
 	 *
 	 * @param query the query defining the ids of the objects to get
 	 * @param clazz the type of the object to be returned
+	 * @return list of objects, contains null values for ids that are not found
+	 * @since 4.1
+	 */
+	<T> List<T> multiGet(Query query, Class<T> clazz);
+
+	/**
+	 * Execute a multiGet against elasticsearch for the given ids.
+	 *
+	 * @param query the query defining the ids of the objects to get
+	 * @param clazz the type of the object to be returned
 	 * @param index the index(es) from which the objects are read.
-	 * @return list of objects
+	 * @return list of objects, contains null values for ids that are not found
 	 */
 	<T> List<T> multiGet(Query query, Class<T> clazz, IndexCoordinates index);
 
@@ -147,9 +156,21 @@ public interface DocumentOperations {
 	 * Bulk index all objects. Will do save or update.
 	 *
 	 * @param queries the queries to execute in bulk
-	 * @return the ids of the indexed objects
+	 * @param clazz the entity class
+	 * @return the information about the indexed objects
+	 * @since 4.1
 	 */
-	default List<String> bulkIndex(List<IndexQuery> queries, IndexCoordinates index) {
+	default List<IndexedObjectInformation> bulkIndex(List<IndexQuery> queries, Class<?> clazz) {
+		return bulkIndex(queries, BulkOptions.defaultOptions(), clazz);
+	}
+
+	/**
+	 * Bulk index all objects. Will do save or update.
+	 *
+	 * @param queries the queries to execute in bulk
+	 * @return the information about of the indexed objects
+	 */
+	default List<IndexedObjectInformation> bulkIndex(List<IndexQuery> queries, IndexCoordinates index) {
 		return bulkIndex(queries, BulkOptions.defaultOptions(), index);
 	}
 
@@ -158,9 +179,20 @@ public interface DocumentOperations {
 	 *
 	 * @param queries the queries to execute in bulk
 	 * @param bulkOptions options to be added to the bulk request
-	 * @return the ids of the indexed objects
+	 * @param clazz the entity class
+	 * @return the information about of the indexed objects
+	 * @since 4.1
 	 */
-	List<String> bulkIndex(List<IndexQuery> queries, BulkOptions bulkOptions, IndexCoordinates index);
+	List<IndexedObjectInformation> bulkIndex(List<IndexQuery> queries, BulkOptions bulkOptions, Class<?> clazz);
+
+	/**
+	 * Bulk index all objects. Will do save or update.
+	 *
+	 * @param queries the queries to execute in bulk
+	 * @param bulkOptions options to be added to the bulk request
+	 * @return the information about of the indexed objects
+	 */
+	List<IndexedObjectInformation> bulkIndex(List<IndexQuery> queries, BulkOptions bulkOptions, IndexCoordinates index);
 
 	/**
 	 * Bulk update all objects. Will do update.
@@ -173,6 +205,15 @@ public interface DocumentOperations {
 
 	/**
 	 * Bulk update all objects. Will do update.
+	 * 
+	 * @param clazz the entity class
+	 * @param queries the queries to execute in bulk
+	 * @since 4.1
+	 */
+	void bulkUpdate(List<UpdateQuery> queries, Class<?> clazz);
+
+	/**
+	 * Bulk update all objects. Will do update.
 	 *
 	 * @param queries the queries to execute in bulk
 	 * @param bulkOptions options to be added to the bulk request
@@ -182,11 +223,24 @@ public interface DocumentOperations {
 	/**
 	 * Delete the one object with provided id.
 	 *
-	 * @param id the document ot delete
+	 * @param id the document to delete
 	 * @param index the index from which to delete
 	 * @return documentId of the document deleted
 	 */
-	String delete(String id, IndexCoordinates index);
+	default String delete(String id, IndexCoordinates index) {
+		return delete(id, null, index);
+	}
+
+	/**
+	 * Delete the one object with provided id.
+	 *
+	 * @param id the document to delete
+	 * @param routing the optional routing for the document to be deleted
+	 * @param index the index from which to delete
+	 * @return documentId of the document deleted
+	 * @since 4.1
+	 */
+	String delete(String id, @Nullable String routing, IndexCoordinates index);
 
 	/**
 	 * Delete the one object with provided id.
@@ -213,6 +267,16 @@ public interface DocumentOperations {
 	 * @return documentId of the document deleted
 	 */
 	String delete(Object entity, IndexCoordinates index);
+
+	/**
+	 * Delete all records matching the query.
+	 *
+	 * @param query query defining the objects
+	 * @param clazz The entity class, must be annotated with
+	 *          {@link org.springframework.data.elasticsearch.annotations.Document}
+	 * @since 4.1
+	 */
+	void delete(Query query, Class<?> clazz);
 
 	/**
 	 * Delete all records matching the query.
@@ -251,11 +315,22 @@ public interface DocumentOperations {
 	 * @param clazz the type of the object to be returned
 	 * @param index the index from which the object is read.
 	 * @return the found object
-	 * @deprecated since 4.0, use {@link #getById(String, Class, IndexCoordinates)}
+	 * @deprecated since 4.0, use {@link #get(String, Class, IndexCoordinates)}
 	 */
 	@Deprecated
 	@Nullable
 	<T> T get(GetQuery query, Class<T> clazz, IndexCoordinates index);
 
+	/**
+	 * Retrieves an object from an index.
+	 *
+	 * @param query the query defining the id of the object to get
+	 * @param clazz the type of the object to be returned
+	 * @return the found object
+	 * @deprecated since 4.0, use {@link #get(String, Class, IndexCoordinates)}
+	 */
+	@Deprecated
+	@Nullable
+	<T> T queryForObject(GetQuery query, Class<T> clazz);
 	// endregion
 }

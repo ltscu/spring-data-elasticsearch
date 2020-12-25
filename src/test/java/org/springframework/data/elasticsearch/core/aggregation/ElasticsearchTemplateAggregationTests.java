@@ -97,7 +97,7 @@ public class ElasticsearchTemplateAggregationTests {
 				.addAuthor(RIZWAN_IDREES).addPublishedYear(YEAR_2002).addPublishedYear(YEAR_2001).addPublishedYear(YEAR_2000)
 				.score(40).buildIndex();
 
-		IndexCoordinates index = IndexCoordinates.of(INDEX_NAME).withTypes("article");
+		IndexCoordinates index = IndexCoordinates.of(INDEX_NAME);
 		operations.index(article1, index);
 		operations.index(article2, index);
 		operations.index(article3, index);
@@ -118,6 +118,7 @@ public class ElasticsearchTemplateAggregationTests {
 				.withQuery(matchAllQuery()) //
 				.withSearchType(SearchType.DEFAULT) //
 				.addAggregation(terms("subjects").field("subject")) //
+				.withMaxResults(0) //
 				.build();
 		// when
 		SearchHits<ArticleEntity> searchHits = operations.search(searchQuery, ArticleEntity.class,
@@ -127,6 +128,7 @@ public class ElasticsearchTemplateAggregationTests {
 		// then
 		assertThat(aggregations).isNotNull();
 		assertThat(aggregations.asMap().get("subjects")).isNotNull();
+		assertThat(searchHits.hasSearchHits()).isFalse();
 	}
 
 	/**

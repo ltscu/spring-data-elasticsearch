@@ -21,33 +21,41 @@ package org.springframework.data.elasticsearch.annotations;
  * @author Artur Konczak
  * @author Zeng Zetang
  * @author Peter-Josef Meisch
+ * @author Aleksei Arsenev
  */
 public enum FieldType {
-    Auto,
-    Text,
-    Keyword,
-    Long,
-    Integer,
-    Short,
-    Byte,
-    Double,
-    Float,
-    Half_Float,
-    Scaled_Float,
-    Date,
-    Date_Nanos,
-    Boolean,
-    Binary,
-    Integer_Range,
-    Float_Range,
-    Long_Range,
-    Double_Range,
-    Date_Range,
-    Ip_Range,
-    Object,
-    Nested,
-    Ip,
-    TokenCount,
-    Percolator,
-    Flattened
+	Auto, //
+	Text, //
+	Keyword, //
+	Long, //
+	Integer, //
+	Short, //
+	Byte, //
+	Double, //
+	Float, //
+	Half_Float, //
+	Scaled_Float, //
+	Date, //
+	Date_Nanos, //
+	Boolean, //
+	Binary, //
+	Integer_Range, //
+	Float_Range, //
+	Long_Range, //
+	Double_Range, //
+	Date_Range, //
+	Ip_Range, //
+	Object, //
+	Nested, //
+	Ip, //
+	TokenCount, //
+	Percolator, //
+	Flattened, //
+	Search_As_You_Type, //
+	/** @since 4.1 */
+	Rank_Feature, //
+	/** @since 4.1 */
+	Rank_Features, //
+	/** since 4.2 */
+	Wildcard //
 }

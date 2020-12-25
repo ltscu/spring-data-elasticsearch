@@ -5,12 +5,12 @@
 
 	<groupId>org.springframework.data</groupId>
 	<artifactId>spring-data-elasticsearch</artifactId>
-	<version>4.0.0.BUILD-SNAPSHOT</version>
+	<version>4.2.0-SNAPSHOT</version>
 
 	<parent>
 		<groupId>org.springframework.data.build</groupId>
 		<artifactId>spring-data-parent</artifactId>
-		<version>2.3.0.BUILD-SNAPSHOT</version>
+		<version>2.5.0-SNAPSHOT</version>
 	</parent>
 
 	<name>Spring Data Elasticsearch</name>
@@ -19,10 +19,10 @@
 
 	<properties>
 		<commonslang>2.6</commonslang>
-		<elasticsearch>7.6.1</elasticsearch>
-		<log4j>2.9.1</log4j>
-		<springdata.commons>2.3.0.BUILD-SNAPSHOT</springdata.commons>
-		<netty>4.1.39.Final</netty>
+		<elasticsearch>7.10.0</elasticsearch>
+		<log4j>2.13.3</log4j>
+		<netty>4.1.52.Final</netty>
+		<springdata.commons>2.5.0-SNAPSHOT</springdata.commons>
 		<java-module-name>spring.data.elasticsearch</java-module-name>
 	</properties>
 
@@ -74,7 +74,6 @@
 	</issueManagement>
 
 	<dependencyManagement>
-
 		<dependencies>
 			<dependency>
 				<groupId>io.netty</groupId>
@@ -121,7 +120,7 @@
 
 		<dependency>
 			<groupId>io.projectreactor.netty</groupId>
-			<artifactId>reactor-netty</artifactId>
+			<artifactId>reactor-netty-http</artifactId>
 			<optional>true</optional>
 		</dependency>
 
@@ -152,12 +151,6 @@
 			<groupId>org.elasticsearch.client</groupId>
 			<artifactId>transport</artifactId>
 			<version>${elasticsearch}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>commons-logging</groupId>
-					<artifactId>commons-logging</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 
 		<dependency>
@@ -226,6 +219,13 @@
 		</dependency>
 
 		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-to-slf4j</artifactId>
+			<version>${log4j}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
 			<groupId>org.apache.openwebbeans.test</groupId>
 			<artifactId>cditest-owb</artifactId>
 			<version>1.2.8</version>
@@ -252,7 +252,7 @@
 		<dependency>
 			<groupId>com.github.tomakehurst</groupId>
 			<artifactId>wiremock-jre8</artifactId>
-			<version>2.25.1</version>
+			<version>2.26.3</version>
 			<scope>test</scope>
 			<exclusions>
 				<!-- these exclusions are needed because of Elasticsearch JarHell-->
@@ -265,6 +265,13 @@
 					<artifactId>asm</artifactId>
 				</exclusion>
 			</exclusions>
+		</dependency>
+
+		<dependency>
+			<groupId>io.specto</groupId>
+			<artifactId>hoverfly-java-junit5</artifactId>
+			<version>0.13.1</version>
+			<scope>test</scope>
 		</dependency>
 
 		<!-- Upgrade xbean to 4.5 to prevent incompatibilities due to ASM versions -->
@@ -289,9 +296,33 @@
 			<scope>test</scope>
 		</dependency>
 
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>elasticsearch</artifactId>
+			<version>${testcontainers}</version>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 
 	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>true</filtering>
+				<includes>
+					<include>**/versions.properties</include>
+				</includes>
+			</resource>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>false</filtering>
+				<excludes>
+					<exclude>**/versions.properties</exclude>
+				</excludes>
+			</resource>
+		</resources>
+
 		<plugins>
 			<!--
 			please do not remove this configuration for surefire - we need that to avoid issue with jar hell
@@ -304,12 +335,57 @@
 					<useFile>false</useFile>
 					<includes>
 						<include>**/*Tests.java</include>
+						<include>**/*Test.java</include>
 					</includes>
 					<systemPropertyVariables>
 						<es.set.netty.runtime.available.processors>false</es.set.netty.runtime.available.processors>
 					</systemPropertyVariables>
 				</configuration>
+				<executions>
+					<!-- the default-test execution runs only the unit tests -->
+					<execution>
+						<id>default-test</id>
+						<phase>test</phase>
+						<goals>
+							<goal>test</goal>
+						</goals>
+						<configuration>
+							<excludedGroups>integration-test</excludedGroups>
+						</configuration>
+					</execution>
+					<!-- execution to run the integration tests -->
+					<execution>
+						<id>integration-test</id>
+						<phase>integration-test</phase>
+						<goals>
+							<goal>test</goal>
+						</goals>
+						<configuration>
+							<groups>integration-test</groups>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
+			<plugin>
+				<groupId>org.pitest</groupId>
+				<artifactId>pitest-maven</artifactId>
+				<version>1.5.2</version>
+				<dependencies>
+					<dependency>
+						<groupId>org.pitest</groupId>
+						<artifactId>pitest-junit5-plugin</artifactId>
+						<version>0.12</version>
+					</dependency>
+				</dependencies>
+				<configuration>
+					<excludedGroups>integration-test</excludedGroups>
+					<targetClasses>
+						<param>org.springframework.data.elasticsearch.core.geo.*</param>
+					</targetClasses>
+					<excludedMethods>toString</excludedMethods>
+				</configuration>
+			</plugin>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-assembly-plugin</artifactId>
@@ -364,6 +440,11 @@
 		<pluginRepository>
 			<id>spring-plugins-release</id>
 			<url>https://repo.spring.io/plugins-release</url>
+		</pluginRepository>
+		<pluginRepository>
+			<id>bintray-plugins</id>
+			<name>bintray-plugins</name>
+			<url>https://jcenter.bintray.com</url>
 		</pluginRepository>
 	</pluginRepositories>
 

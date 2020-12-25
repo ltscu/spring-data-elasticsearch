@@ -19,10 +19,12 @@ import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
 import java.util.Collections;
+import java.util.function.Supplier;
 
 import org.springframework.data.elasticsearch.client.ElasticsearchHost;
 import org.springframework.data.elasticsearch.client.ElasticsearchHost.State;
 import org.springframework.data.elasticsearch.client.NoReachableHostException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -30,17 +32,21 @@ import org.springframework.web.reactive.function.client.WebClient;
  *
  * @author Christoph Strobl
  * @author Mark Paluch
+ * @author Peter-Josef Meisch
  * @since 3.2
  */
-class SingleNodeHostProvider implements HostProvider {
+class SingleNodeHostProvider implements HostProvider<SingleNodeHostProvider> {
 
 	private final WebClientProvider clientProvider;
+	private final Supplier<HttpHeaders> headersSupplier;
 	private final InetSocketAddress endpoint;
 	private volatile ElasticsearchHost state;
 
-	SingleNodeHostProvider(WebClientProvider clientProvider, InetSocketAddress endpoint) {
+	SingleNodeHostProvider(WebClientProvider clientProvider, Supplier<HttpHeaders> headersSupplier,
+			InetSocketAddress endpoint) {
 
 		this.clientProvider = clientProvider;
+		this.headersSupplier = headersSupplier;
 		this.endpoint = endpoint;
 		this.state = new ElasticsearchHost(this.endpoint, State.UNKNOWN);
 	}
@@ -53,9 +59,9 @@ class SingleNodeHostProvider implements HostProvider {
 	public Mono<ClusterInformation> clusterInfo() {
 
 		return createWebClient(endpoint) //
-				.head().uri("/").exchange() //
-				.flatMap(it -> {
-
+				.head().uri("/") //
+				.headers(httpHeaders -> httpHeaders.addAll(headersSupplier.get())) //
+				.exchangeToMono(it -> {
 					if (it.statusCode().isError()) {
 						state = ElasticsearchHost.offline(endpoint);
 					} else {
@@ -63,12 +69,10 @@ class SingleNodeHostProvider implements HostProvider {
 					}
 					return Mono.just(state);
 				}).onErrorResume(throwable -> {
-
 					state = ElasticsearchHost.offline(endpoint);
 					clientProvider.getErrorListener().accept(throwable);
 					return Mono.just(state);
-				}) //
-				.flatMap(it -> Mono.just(new ClusterInformation(Collections.singleton(it))));
+				}).map(elasticsearchHost -> new ClusterInformation(Collections.singleton(elasticsearchHost)));
 	}
 
 	/*
@@ -91,14 +95,16 @@ class SingleNodeHostProvider implements HostProvider {
 			return Mono.just(endpoint);
 		}
 
-		return clusterInfo().flatMap(it -> {
+		return clusterInfo().handle((information, sink) -> {
 
-			ElasticsearchHost host = it.getNodes().iterator().next();
+			ElasticsearchHost host = information.getNodes().iterator().next();
 			if (host.isOnline()) {
-				return Mono.just(host.getEndpoint());
+
+				sink.next(host.getEndpoint());
+				return;
 			}
 
-			return Mono.error(() -> new NoReachableHostException(Collections.singleton(host)));
+			sink.error(new NoReachableHostException(Collections.singleton(host)));
 		});
 	}
 

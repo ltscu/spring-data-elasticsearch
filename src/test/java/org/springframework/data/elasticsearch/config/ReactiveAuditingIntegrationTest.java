@@ -17,8 +17,9 @@ package org.springframework.data.elasticsearch.config;
 
 import static org.assertj.core.api.Assertions.*;
 
+import reactor.core.publisher.Mono;
+
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,9 +31,10 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.domain.AuditorAware;
 import org.springframework.data.domain.Persistable;
+import org.springframework.data.domain.ReactiveAuditorAware;
 import org.springframework.data.elasticsearch.core.event.ReactiveBeforeConvertCallback;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.mapping.SimpleElasticsearchMappingContext;
 import org.springframework.data.elasticsearch.junit.jupiter.ReactiveElasticsearchRestTemplateConfiguration;
 import org.springframework.data.elasticsearch.junit.jupiter.SpringIntegrationTest;
@@ -42,28 +44,29 @@ import org.springframework.test.context.ContextConfiguration;
 
 /**
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
  */
 @SpringIntegrationTest
 @ContextConfiguration(classes = { ReactiveAuditingIntegrationTest.Config.class })
 public class ReactiveAuditingIntegrationTest {
 
-	public static AuditorAware<String> auditorProvider() {
-		return new AuditorAware<String>() {
+	public static ReactiveAuditorAware<String> auditorProvider() {
+		return new ReactiveAuditorAware<String>() {
 			int count = 0;
 
 			@Override
-			public Optional<String> getCurrentAuditor() {
-				return Optional.of("Auditor " + (++count));
+			public Mono<String> getCurrentAuditor() {
+				return Mono.just("Auditor " + (++count));
 			}
 		};
 	}
 
 	@Import({ ReactiveElasticsearchRestTemplateConfiguration.class })
-	@EnableElasticsearchAuditing(auditorAwareRef = "auditorAware")
+	@EnableReactiveElasticsearchAuditing(auditorAwareRef = "auditorAware")
 	static class Config {
 
 		@Bean
-		public AuditorAware<String> auditorAware() {
+		public ReactiveAuditorAware<String> auditorAware() {
 			return auditorProvider();
 		}
 	}
@@ -81,7 +84,7 @@ public class ReactiveAuditingIntegrationTest {
 
 		Entity entity = new Entity();
 		entity.setId("1");
-		entity = callbacks.callback(ReactiveBeforeConvertCallback.class, entity).block();
+		entity = callbacks.callback(ReactiveBeforeConvertCallback.class, entity, IndexCoordinates.of("index")).block();
 
 		assertThat(entity.getCreated()).isNotNull();
 		assertThat(entity.getModified()).isEqualTo(entity.created);
@@ -90,7 +93,7 @@ public class ReactiveAuditingIntegrationTest {
 
 		Thread.sleep(10);
 
-		entity = callbacks.callback(ReactiveBeforeConvertCallback.class, entity).block();
+		entity = callbacks.callback(ReactiveBeforeConvertCallback.class, entity, IndexCoordinates.of("index")).block();
 
 		assertThat(entity.getCreated()).isNotNull();
 		assertThat(entity.getModified()).isNotEqualTo(entity.created);

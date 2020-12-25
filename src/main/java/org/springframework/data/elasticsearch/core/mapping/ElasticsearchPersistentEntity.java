@@ -17,6 +17,9 @@ package org.springframework.data.elasticsearch.core.mapping;
 
 import org.elasticsearch.index.VersionType;
 import org.springframework.data.elasticsearch.annotations.Field;
+import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.join.JoinField;
+import org.springframework.data.elasticsearch.core.query.SeqNoPrimaryTerm;
 import org.springframework.data.mapping.PersistentEntity;
 import org.springframework.lang.Nullable;
 
@@ -30,6 +33,8 @@ import org.springframework.lang.Nullable;
  * @author Oliver Gierke
  * @author Ivan Greene
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
+ * @author Subhobrata Dey
  */
 public interface ElasticsearchPersistentEntity<T> extends PersistentEntity<T, ElasticsearchPersistentProperty> {
 
@@ -50,15 +55,25 @@ public interface ElasticsearchPersistentEntity<T> extends PersistentEntity<T, El
 	@Override
 	ElasticsearchPersistentProperty getVersionProperty();
 
+	/**
+	 * @deprecated since 4.1, not supported anymore by Elasticsearch
+	 */
+	@Deprecated
 	@Nullable
 	String getParentType();
 
+	/**
+	 * @deprecated since 4.1, not supported anymore by Elasticsearch
+	 */
+	@Deprecated
 	@Nullable
 	ElasticsearchPersistentProperty getParentIdProperty();
 
+	@Nullable
 	String settingPath();
 
-	@Nullable VersionType getVersionType();
+	@Nullable
+	VersionType getVersionType();
 
 	boolean isCreateIndexAndMapping();
 
@@ -96,4 +111,69 @@ public interface ElasticsearchPersistentEntity<T> extends PersistentEntity<T, El
 	 */
 	@Nullable
 	ElasticsearchPersistentProperty getPersistentPropertyWithFieldName(String fieldName);
+
+	/**
+	 * Returns whether the {@link ElasticsearchPersistentEntity} has a {@link SeqNoPrimaryTerm} property. If this call
+	 * returns {@literal true}, {@link #getSeqNoPrimaryTermProperty()} will return a non-{@literal null} value.
+	 *
+	 * @return false when {@link ElasticsearchPersistentEntity} does not define a SeqNoPrimaryTerm property.
+	 * @since 4.0
+	 */
+	boolean hasSeqNoPrimaryTermProperty();
+
+	/**
+	 * Returns whether the {@link ElasticsearchPersistentEntity} has a {@link JoinField} property. If this call returns
+	 * {@literal true}, {@link #getJoinFieldProperty()} will return a non-{@literal null} value.
+	 *
+	 * @return false when {@link ElasticsearchPersistentEntity} does not define a JoinField property.
+	 * @since 4.1
+	 */
+	boolean hasJoinFieldProperty();
+
+	/**
+	 * Returns the {@link SeqNoPrimaryTerm} property of the {@link ElasticsearchPersistentEntity}. Can be {@literal null}
+	 * in case no such property is available on the entity.
+	 *
+	 * @return the {@link SeqNoPrimaryTerm} {@link ElasticsearchPersistentProperty} of the {@link PersistentEntity} or
+	 *         {@literal null} if not defined.
+	 * @since 4.0
+	 */
+	@Nullable
+	ElasticsearchPersistentProperty getSeqNoPrimaryTermProperty();
+
+	/**
+	 * Returns the {@link JoinField} property of the {@link ElasticsearchPersistentEntity}. Can be {@literal null} in case
+	 * no such property is available on the entity.
+	 *
+	 * @return the {@link JoinField} {@link ElasticsearchPersistentProperty} of the {@link PersistentEntity} or
+	 *         {@literal null} if not defined.
+	 * @since 4.1
+	 */
+	@Nullable
+	ElasticsearchPersistentProperty getJoinFieldProperty();
+
+	/**
+	 * Returns the {@link SeqNoPrimaryTerm} property of the {@link ElasticsearchPersistentEntity} or throws an
+	 * IllegalStateException in case no such property is available on the entity.
+	 *
+	 * @return the {@link SeqNoPrimaryTerm} {@link ElasticsearchPersistentProperty} of the {@link PersistentEntity}.
+	 * @since 4.0
+	 */
+	default ElasticsearchPersistentProperty getRequiredSeqNoPrimaryTermProperty() {
+		ElasticsearchPersistentProperty property = this.getSeqNoPrimaryTermProperty();
+		if (property != null) {
+			return property;
+		} else {
+			throw new IllegalStateException(
+					String.format("Required SeqNoPrimaryTerm property not found for %s!", this.getType()));
+		}
+	}
+
+	/**
+	 * returns the default settings for an index.
+	 * 
+	 * @return settings as {@link Document}
+	 * @since 4.1
+	 */
+	Document getDefaultSettings();
 }

@@ -15,14 +15,19 @@
  */
 package org.springframework.data.elasticsearch.core.query;
 
+import org.springframework.lang.Nullable;
+
 /**
  * SourceFilter for providing includes and excludes.
  *
- * @Author Jon Tsiros
+ * @author Jon Tsiros
+ * @author Peter-Josef Meisch
  */
 public interface SourceFilter {
 
+	@Nullable
 	String[] getIncludes();
 
+	@Nullable
 	String[] getExcludes();
 }

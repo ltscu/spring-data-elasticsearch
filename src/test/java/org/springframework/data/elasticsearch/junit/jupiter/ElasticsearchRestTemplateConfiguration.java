@@ -21,9 +21,13 @@ import org.elasticsearch.client.RestHighLevelClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.elasticsearch.client.ClientConfiguration;
 import org.springframework.data.elasticsearch.client.RestClients;
 import org.springframework.data.elasticsearch.config.AbstractElasticsearchConfiguration;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
+import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
 
 /**
  * Configuration for Spring Data Elasticsearch using
@@ -45,15 +49,39 @@ public class ElasticsearchRestTemplateConfiguration extends AbstractElasticsearc
 		ClientConfiguration.TerminalClientConfigurationBuilder configurationBuilder = ClientConfiguration.builder()
 				.connectedTo(elasticsearchHostPort);
 
+		String proxy = System.getenv("DATAES_ELASTICSEARCH_PROXY");
+
+		if (proxy != null) {
+			configurationBuilder = configurationBuilder.withProxy(proxy);
+		}
+
 		if (clusterConnectionInfo.isUseSsl()) {
 			configurationBuilder = ((ClientConfiguration.MaybeSecureClientConfigurationBuilder) configurationBuilder)
 					.usingSsl();
 		}
 
 		return RestClients.create(configurationBuilder //
-				.withConnectTimeout(Duration.ofSeconds(5)) //
-				.withSocketTimeout(Duration.ofSeconds(3)) //
+				.withConnectTimeout(Duration.ofSeconds(20)) //
+				.withSocketTimeout(Duration.ofSeconds(20)) //
 				.build()) //
 				.rest();
+	}
+
+	@Override
+	public ElasticsearchOperations elasticsearchOperations(ElasticsearchConverter elasticsearchConverter,
+			RestHighLevelClient elasticsearchClient) {
+		return new ElasticsearchRestTemplate(elasticsearchClient, elasticsearchConverter) {
+			@Override
+			public <T> T execute(ClientCallback<T> callback) {
+				try {
+					return super.execute(callback);
+				} catch (DataAccessResourceFailureException e) {
+					try {
+						Thread.sleep(1_000);
+					} catch (InterruptedException ignored) {}
+					return super.execute(callback);
+				}
+			}
+		};
 	}
 }

@@ -22,10 +22,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 
+import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.Nullable;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -47,14 +49,18 @@ class DefaultClientConfiguration implements ClientConfiguration {
 	private final @Nullable SSLContext sslContext;
 	private final Duration soTimeout;
 	private final Duration connectTimeout;
-	private final String pathPrefix;
+	private final @Nullable String pathPrefix;
 	private final @Nullable HostnameVerifier hostnameVerifier;
-	private final String proxy;
+	private final @Nullable String proxy;
 	private final Function<WebClient, WebClient> webClientConfigurer;
+	private final HttpClientConfigCallback httpClientConfigurer;
+	private final Supplier<HttpHeaders> headersSupplier;
 
 	DefaultClientConfiguration(List<InetSocketAddress> hosts, HttpHeaders headers, boolean useSsl,
 			@Nullable SSLContext sslContext, Duration soTimeout, Duration connectTimeout, @Nullable String pathPrefix,
-			@Nullable HostnameVerifier hostnameVerifier, String proxy, Function<WebClient, WebClient> webClientConfigurer) {
+			@Nullable HostnameVerifier hostnameVerifier, @Nullable String proxy,
+			Function<WebClient, WebClient> webClientConfigurer, HttpClientConfigCallback httpClientConfigurer,
+			Supplier<HttpHeaders> headersSupplier) {
 
 		this.hosts = Collections.unmodifiableList(new ArrayList<>(hosts));
 		this.headers = new HttpHeaders(headers);
@@ -66,6 +72,8 @@ class DefaultClientConfiguration implements ClientConfiguration {
 		this.hostnameVerifier = hostnameVerifier;
 		this.proxy = proxy;
 		this.webClientConfigurer = webClientConfigurer;
+		this.httpClientConfigurer = httpClientConfigurer;
+		this.headersSupplier = headersSupplier;
 	}
 
 	@Override
@@ -103,6 +111,7 @@ class DefaultClientConfiguration implements ClientConfiguration {
 		return this.soTimeout;
 	}
 
+	@Nullable
 	@Override
 	public String getPathPrefix() {
 		return this.pathPrefix;
@@ -115,6 +124,16 @@ class DefaultClientConfiguration implements ClientConfiguration {
 
 	@Override
 	public Function<WebClient, WebClient> getWebClientConfigurer() {
-		return webClientConfigurer != null ? webClientConfigurer : Function.identity();
+		return webClientConfigurer;
+	}
+
+	@Override
+	public HttpClientConfigCallback getHttpClientConfigurer() {
+		return httpClientConfigurer;
+	}
+
+	@Override
+	public Supplier<HttpHeaders> getHeadersSupplier() {
+		return headersSupplier;
 	}
 }

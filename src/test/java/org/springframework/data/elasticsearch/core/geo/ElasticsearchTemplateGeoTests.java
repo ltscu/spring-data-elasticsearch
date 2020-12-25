@@ -71,10 +71,8 @@ public class ElasticsearchTemplateGeoTests {
 	@Import({ ElasticsearchRestTemplateConfiguration.class })
 	static class Config {}
 
-	private final IndexCoordinates locationMarkerIndex = IndexCoordinates.of("test-index-location-marker-core-geo")
-			.withTypes("geo-annotation-point-type");
-	private final IndexCoordinates authorMarkerIndex = IndexCoordinates.of("test-index-author-marker-core-geo")
-			.withTypes("geo-class-point-type");
+	private final IndexCoordinates locationMarkerIndex = IndexCoordinates.of("test-index-location-marker-core-geo");
+	private final IndexCoordinates authorMarkerIndex = IndexCoordinates.of("test-index-author-marker-core-geo");
 
 	@Autowired private ElasticsearchOperations operations;
 
@@ -304,7 +302,7 @@ public class ElasticsearchTemplateGeoTests {
 		// given
 		loadClassBaseEntities();
 		CriteriaQuery geoLocationCriteriaQuery3 = new CriteriaQuery(
-				new Criteria("location").boundedBy(new Point(53.5171d, 0), new Point(49.5171d, 0.2062d)));
+				new Criteria("location").boundedBy(new Point(0, 53.5171d), new Point(0.2062d, 49.5171d)));
 
 		// when
 		SearchHits<AuthorMarkerEntity> geoAuthorsForGeoCriteria3 = operations.search(geoLocationCriteriaQuery3,

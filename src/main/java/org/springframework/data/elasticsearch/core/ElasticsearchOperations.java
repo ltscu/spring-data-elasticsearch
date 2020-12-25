@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import org.elasticsearch.cluster.metadata.AliasMetaData;
+import org.elasticsearch.cluster.metadata.AliasMetadata;
 import org.springframework.data.elasticsearch.core.convert.ElasticsearchConverter;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
@@ -49,7 +49,7 @@ public interface ElasticsearchOperations extends DocumentOperations, SearchOpera
 	IndexOperations indexOps(Class<?> clazz);
 
 	/**
-	 * get an {@link IndexOperations} that is bound to the given class
+	 * get an {@link IndexOperations} that is bound to the given index
 	 * 
 	 * @return IndexOperations
 	 */
@@ -59,9 +59,19 @@ public interface ElasticsearchOperations extends DocumentOperations, SearchOpera
 
 	IndexCoordinates getIndexCoordinatesFor(Class<?> clazz);
 
+	/**
+	 * gets the routing for an entity which might be defined by a join-type relation
+	 * 
+	 * @param entity the entity
+	 * @return the routing, may be null if not set.
+	 * @since 4.1
+	 */
+	@Nullable
+	String getEntityRouting(Object entity);
+
 	// region IndexOperations
 	/**
-	 * Create an index for given indexName if it does not already exist.
+	 * Create an index for given indexName .
 	 *
 	 * @param indexName the name of the index
 	 * @return {@literal true} if the index was created
@@ -186,7 +196,7 @@ public interface ElasticsearchOperations extends DocumentOperations, SearchOpera
 	@Deprecated
 	default boolean putMapping(Class<?> clazz) {
 		IndexOperations indexOps = indexOps(clazz);
-		return indexOps.putMapping(indexOps.createMapping(clazz));
+		return indexOps.putMapping(clazz);
 	}
 
 	/**
@@ -202,7 +212,7 @@ public interface ElasticsearchOperations extends DocumentOperations, SearchOpera
 	@Deprecated
 	default boolean putMapping(IndexCoordinates index, Class<?> clazz) {
 		IndexOperations indexOps = indexOps(index);
-		return indexOps.putMapping(indexOps.createMapping(clazz));
+		return indexOps.putMapping(clazz);
 	}
 
 	/**
@@ -291,7 +301,7 @@ public interface ElasticsearchOperations extends DocumentOperations, SearchOpera
 	 * @deprecated since 4.0, use {@link #indexOps(IndexCoordinates)} and {@link IndexOperations#queryForAlias()}
 	 */
 	@Deprecated
-	default List<AliasMetaData> queryForAlias(String indexName) {
+	default List<AliasMetadata> queryForAlias(String indexName) {
 		return indexOps(IndexCoordinates.of(indexName)).queryForAlias();
 	}
 

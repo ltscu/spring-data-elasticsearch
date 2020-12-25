@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.support.IndicesOptions;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.aggregations.AbstractAggregationBuilder;
 import org.elasticsearch.search.collapse.CollapseBuilder;
@@ -49,9 +50,9 @@ public class NativeSearchQueryBuilder {
 
 	@Nullable private QueryBuilder queryBuilder;
 	@Nullable private QueryBuilder filterBuilder;
-	private List<ScriptField> scriptFields = new ArrayList<>();
-	private List<SortBuilder> sortBuilders = new ArrayList<>();
-	private List<AbstractAggregationBuilder> aggregationBuilders = new ArrayList<>();
+	private final List<ScriptField> scriptFields = new ArrayList<>();
+	private final List<SortBuilder<?>> sortBuilders = new ArrayList<>();
+	private final List<AbstractAggregationBuilder<?>> aggregationBuilders = new ArrayList<>();
 	@Nullable private HighlightBuilder highlightBuilder;
 	@Nullable private HighlightBuilder.Field[] highlightFields;
 	private Pageable pageable = Pageable.unpaged();
@@ -66,6 +67,9 @@ public class NativeSearchQueryBuilder {
 	@Nullable private SearchType searchType;
 	@Nullable private IndicesOptions indicesOptions;
 	@Nullable private String preference;
+	@Nullable private Integer maxResults;
+	@Nullable private Boolean trackTotalHits;
+	@Nullable private TimeValue timeout;
 
 	public NativeSearchQueryBuilder withQuery(QueryBuilder queryBuilder) {
 		this.queryBuilder = queryBuilder;
@@ -77,7 +81,7 @@ public class NativeSearchQueryBuilder {
 		return this;
 	}
 
-	public NativeSearchQueryBuilder withSort(SortBuilder sortBuilder) {
+	public NativeSearchQueryBuilder withSort(SortBuilder<?> sortBuilder) {
 		this.sortBuilders.add(sortBuilder);
 		return this;
 	}
@@ -92,7 +96,7 @@ public class NativeSearchQueryBuilder {
 		return this;
 	}
 
-	public NativeSearchQueryBuilder addAggregation(AbstractAggregationBuilder aggregationBuilder) {
+	public NativeSearchQueryBuilder addAggregation(AbstractAggregationBuilder<?> aggregationBuilder) {
 		this.aggregationBuilders.add(aggregationBuilder);
 		return this;
 	}
@@ -134,7 +138,7 @@ public class NativeSearchQueryBuilder {
 
 	/**
 	 * @param trackScores whether to track scores.
-	 * @return
+	 * @return this object
 	 * @since 3.1
 	 */
 	public NativeSearchQueryBuilder withTrackScores(boolean trackScores) {
@@ -167,7 +171,26 @@ public class NativeSearchQueryBuilder {
 		return this;
 	}
 
+	public NativeSearchQueryBuilder withMaxResults(Integer maxResults) {
+		this.maxResults = maxResults;
+		return this;
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	public NativeSearchQueryBuilder withTrackTotalHits(Boolean trackTotalHits) {
+		this.trackTotalHits = trackTotalHits;
+		return this;
+	}
+	
+	public NativeSearchQueryBuilder withTimeout(TimeValue timeout) {   
+		this.timeout = timeout;
+		return this;
+	}
+
 	public NativeSearchQuery build() {
+
 		NativeSearchQuery nativeSearchQuery = new NativeSearchQuery(queryBuilder, filterBuilder, sortBuilders,
 				highlightBuilder, highlightFields);
 
@@ -217,8 +240,19 @@ public class NativeSearchQueryBuilder {
 		if (indicesOptions != null) {
 			nativeSearchQuery.setIndicesOptions(indicesOptions);
 		}
+
 		if (preference != null) {
 			nativeSearchQuery.setPreference(preference);
+		}
+
+		if (maxResults != null) {
+			nativeSearchQuery.setMaxResults(maxResults);
+		}
+
+		nativeSearchQuery.setTrackTotalHits(trackTotalHits);
+		
+		if (timeout != null) {
+			nativeSearchQuery.setTimeout(timeout);
 		}
 
 		return nativeSearchQuery;

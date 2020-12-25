@@ -15,39 +15,45 @@
  */
 package org.springframework.data.elasticsearch.core;
 
-import static org.elasticsearch.client.Requests.*;
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
-import org.apache.http.util.EntityUtils;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
+import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.admin.indices.settings.get.GetSettingsRequest;
 import org.elasticsearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.elasticsearch.client.Request;
+import org.elasticsearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;
+import org.elasticsearch.client.GetAliasesResponse;
 import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.Response;
-import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
+import org.elasticsearch.client.indices.GetIndexTemplatesRequest;
+import org.elasticsearch.client.indices.GetIndexTemplatesResponse;
+import org.elasticsearch.client.indices.GetMappingsRequest;
+import org.elasticsearch.client.indices.IndexTemplatesExistRequest;
+import org.elasticsearch.client.indices.PutIndexTemplateRequest;
 import org.elasticsearch.client.indices.PutMappingRequest;
-import org.elasticsearch.cluster.metadata.AliasMetaData;
-import org.springframework.data.elasticsearch.UncategorizedElasticsearchException;
-import org.springframework.data.elasticsearch.core.client.support.AliasData;
+import org.elasticsearch.cluster.metadata.AliasMetadata;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.index.AliasActions;
+import org.springframework.data.elasticsearch.core.index.AliasData;
+import org.springframework.data.elasticsearch.core.index.DeleteTemplateRequest;
+import org.springframework.data.elasticsearch.core.index.ExistsTemplateRequest;
+import org.springframework.data.elasticsearch.core.index.GetTemplateRequest;
+import org.springframework.data.elasticsearch.core.index.PutTemplateRequest;
+import org.springframework.data.elasticsearch.core.index.TemplateData;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.AliasQuery;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * {@link IndexOperations} implementation using the RestClient.
@@ -58,7 +64,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 class DefaultIndexOperations extends AbstractDefaultIndexOperations implements IndexOperations {
 
-	private ElasticsearchRestTemplate restTemplate;
+	private static final Logger LOGGER = LoggerFactory.getLogger(DefaultIndexOperations.class);
+
+	private final ElasticsearchRestTemplate restTemplate;
 
 	public DefaultIndexOperations(ElasticsearchRestTemplate restTemplate, Class<?> boundClass) {
 		super(restTemplate.getElasticsearchConverter(), boundClass);
@@ -71,27 +79,29 @@ class DefaultIndexOperations extends AbstractDefaultIndexOperations implements I
 	}
 
 	@Override
-	protected boolean doCreate(String indexName, @Nullable Document settings) {
-		CreateIndexRequest request = requestFactory.createIndexRequest(indexName, settings);
+	protected boolean doCreate(IndexCoordinates index, @Nullable Document settings) {
+		CreateIndexRequest request = requestFactory.createIndexRequest(index, settings);
 		return restTemplate.execute(client -> client.indices().create(request, RequestOptions.DEFAULT).isAcknowledged());
 	}
 
 	@Override
-	protected boolean doDelete(String indexName) {
+	protected boolean doDelete(IndexCoordinates index) {
 
-		Assert.notNull(indexName, "No index defined for delete operation");
+		Assert.notNull(index, "index must not be null");
 
-		if (doExists(indexName)) {
-			DeleteIndexRequest request = new DeleteIndexRequest(indexName);
-			return restTemplate.execute(client -> client.indices().delete(request, RequestOptions.DEFAULT).isAcknowledged());
+		if (doExists(index)) {
+			DeleteIndexRequest deleteIndexRequest = requestFactory.deleteIndexRequest(index);
+			return restTemplate
+					.execute(client -> client.indices().delete(deleteIndexRequest, RequestOptions.DEFAULT).isAcknowledged());
 		}
 		return false;
 	}
 
 	@Override
-	protected boolean doExists(String indexName) {
-		GetIndexRequest request = new GetIndexRequest(indexName);
-		return restTemplate.execute(client -> client.indices().exists(request, RequestOptions.DEFAULT));
+	protected boolean doExists(IndexCoordinates index) {
+
+		GetIndexRequest getIndexRequest = requestFactory.getIndexRequest(index);
+		return restTemplate.execute(client -> client.indices().exists(getIndexRequest, RequestOptions.DEFAULT));
 	}
 
 	@Override
@@ -109,16 +119,28 @@ class DefaultIndexOperations extends AbstractDefaultIndexOperations implements I
 
 		Assert.notNull(index, "No index defined for getMapping()");
 
+		GetMappingsRequest mappingsRequest = requestFactory.getMappingsRequest(index);
+
 		return restTemplate.execute(client -> {
-			RestClient restClient = client.getLowLevelClient();
-			Request request = new Request("GET", '/' + index.getIndexName() + "/_mapping");
-			Response response = restClient.performRequest(request);
-			return convertMappingResponse(EntityUtils.toString(response.getEntity()));
+			Map<String, MappingMetadata> mappings = client.indices() //
+					.getMapping(mappingsRequest, RequestOptions.DEFAULT) //
+					.mappings(); //
+
+			if (mappings == null || mappings.size() == 0) {
+				return Collections.emptyMap();
+			}
+
+			if (mappings.size() > 1) {
+				LOGGER.warn("more than one mapping returned for " + index.getIndexName());
+			}
+			// we have at least one, take the first from the iterator
+			return mappings.entrySet().iterator().next().getValue().getSourceAsMap();
 		});
 	}
 
 	@Override
 	protected boolean doAddAlias(AliasQuery query, IndexCoordinates index) {
+
 		IndicesAliasesRequest request = requestFactory.indicesAddAliasesRequest(query, index);
 		return restTemplate
 				.execute(client -> client.indices().updateAliases(request, RequestOptions.DEFAULT).isAcknowledged());
@@ -136,34 +158,45 @@ class DefaultIndexOperations extends AbstractDefaultIndexOperations implements I
 	}
 
 	@Override
-	protected List<AliasMetaData> doQueryForAlias(String indexName) {
-		List<AliasMetaData> aliases = null;
+	protected List<AliasMetadata> doQueryForAlias(IndexCoordinates index) {
+
+		GetAliasesRequest getAliasesRequest = requestFactory.getAliasesRequest(index);
+
 		return restTemplate.execute(client -> {
-			RestClient restClient = client.getLowLevelClient();
-			Response response;
-			String aliasResponse;
-
-			response = restClient.performRequest(new Request("GET", '/' + indexName + "/_alias/*"));
-			aliasResponse = EntityUtils.toString(response.getEntity());
-
-			return convertAliasResponse(aliasResponse);
+			GetAliasesResponse alias = client.indices().getAlias(getAliasesRequest, RequestOptions.DEFAULT);
+			// we only return data for the first index name that was requested (always have done so)
+			String index1 = getAliasesRequest.indices()[0];
+			return new ArrayList<>(alias.getAliases().get(index1));
 		});
 	}
 
 	@Override
-	protected Map<String, Object> doGetSettings(String indexName, boolean includeDefaults) {
+	protected Map<String, Set<AliasData>> doGetAliases(@Nullable String[] aliasNames, @Nullable String[] indexNames) {
 
-		Assert.notNull(indexName, "No index defined for getSettings");
+		GetAliasesRequest getAliasesRequest = requestFactory.getAliasesRequest(aliasNames, indexNames);
 
-		GetSettingsRequest request = new GetSettingsRequest() //
-				.indices(indexName) //
-				.includeDefaults(includeDefaults);
+		return restTemplate.execute(client -> requestFactory
+				.convertAliasesResponse(client.indices().getAlias(getAliasesRequest, RequestOptions.DEFAULT).getAliases()));
+	}
 
-		//
+	@Override
+	public boolean alias(AliasActions aliasActions) {
+
+		IndicesAliasesRequest request = requestFactory.indicesAliasesRequest(aliasActions);
+		return restTemplate
+				.execute(client -> client.indices().updateAliases(request, RequestOptions.DEFAULT).isAcknowledged());
+	}
+
+	@Override
+	protected Map<String, Object> doGetSettings(IndexCoordinates index, boolean includeDefaults) {
+
+		Assert.notNull(index, "index must not be null");
+
+		GetSettingsRequest getSettingsRequest = requestFactory.getSettingsRequest(index, includeDefaults);
 		GetSettingsResponse response = restTemplate.execute(client -> client.indices() //
-				.getSettings(request, RequestOptions.DEFAULT));
+				.getSettings(getSettingsRequest, RequestOptions.DEFAULT));
 
-		return convertSettingsResponseToMap(response, indexName);
+		return requestFactory.fromSettingsResponse(response, getSettingsRequest.indices()[0]);
 	}
 
 	@Override
@@ -171,61 +204,57 @@ class DefaultIndexOperations extends AbstractDefaultIndexOperations implements I
 
 		Assert.notNull(index, "No index defined for refresh()");
 
-		restTemplate
-				.execute(client -> client.indices().refresh(refreshRequest(index.getIndexNames()), RequestOptions.DEFAULT));
+		RefreshRequest refreshRequest = requestFactory.refreshRequest(index);
+		restTemplate.execute(client -> client.indices().refresh(refreshRequest, RequestOptions.DEFAULT));
 	}
 
-	// region Helper methods
-	private Map<String, Object> convertMappingResponse(String mappingResponse) {
-		ObjectMapper mapper = new ObjectMapper();
+	@Override
+	public boolean putTemplate(PutTemplateRequest putTemplateRequest) {
 
-		try {
-			Map<String, Object> result = null;
-			JsonNode node = mapper.readTree(mappingResponse);
+		Assert.notNull(putTemplateRequest, "putTemplateRequest must not be null");
 
-			node = node.findValue("mappings");
-			result = mapper.readValue(mapper.writeValueAsString(node), HashMap.class);
+		PutIndexTemplateRequest putIndexTemplateRequest = requestFactory.putIndexTemplateRequest(putTemplateRequest);
+		return restTemplate.execute(
+				client -> client.indices().putTemplate(putIndexTemplateRequest, RequestOptions.DEFAULT).isAcknowledged());
+	}
 
-			return result;
-		} catch (IOException e) {
-			throw new UncategorizedElasticsearchException("Could not map alias response : " + mappingResponse, e);
+	@Override
+	public TemplateData getTemplate(GetTemplateRequest getTemplateRequest) {
+
+		Assert.notNull(getTemplateRequest, "getTemplateRequest must not be null");
+
+		// getIndexTemplate throws an error on non-existing template names
+		if (!existsTemplate(new ExistsTemplateRequest(getTemplateRequest.getTemplateName()))) {
+			return null;
 		}
+
+		GetIndexTemplatesRequest getIndexTemplatesRequest = requestFactory.getIndexTemplatesRequest(getTemplateRequest);
+		GetIndexTemplatesResponse getIndexTemplatesResponse = restTemplate
+				.execute(client -> client.indices().getIndexTemplate(getIndexTemplatesRequest, RequestOptions.DEFAULT));
+		return requestFactory.getTemplateData(getIndexTemplatesResponse, getTemplateRequest.getTemplateName());
 	}
 
-	/**
-	 * It takes two steps to create a List<AliasMetadata> from the elasticsearch http response because the aliases field
-	 * is actually a Map by alias name, but the alias name is on the AliasMetadata.
-	 *
-	 * @param aliasResponse
-	 * @return
-	 */
-	private List<AliasMetaData> convertAliasResponse(String aliasResponse) {
-		ObjectMapper mapper = new ObjectMapper();
+	@Override
+	public boolean existsTemplate(ExistsTemplateRequest existsTemplateRequest) {
 
-		try {
-			JsonNode node = mapper.readTree(aliasResponse);
-			node = node.findValue("aliases");
+		Assert.notNull(existsTemplateRequest, "existsTemplateRequest must not be null");
 
-			if (node == null) {
-				return Collections.emptyList();
-			}
-
-			Map<String, AliasData> aliasData = mapper.readValue(mapper.writeValueAsString(node),
-					new TypeReference<Map<String, AliasData>>() {});
-
-			Iterable<Map.Entry<String, AliasData>> aliasIter = aliasData.entrySet();
-			List<AliasMetaData> aliasMetaDataList = new ArrayList<>();
-
-			for (Map.Entry<String, AliasData> aliasentry : aliasIter) {
-				AliasData data = aliasentry.getValue();
-				aliasMetaDataList.add(AliasMetaData.newAliasMetaDataBuilder(aliasentry.getKey()).filter(data.getFilter())
-						.routing(data.getRouting()).searchRouting(data.getSearch_routing()).indexRouting(data.getIndex_routing())
-						.build());
-			}
-			return aliasMetaDataList;
-		} catch (IOException e) {
-			throw new UncategorizedElasticsearchException("Could not map alias response : " + aliasResponse, e);
-		}
+		IndexTemplatesExistRequest putIndexTemplateRequest = requestFactory
+				.indexTemplatesExistsRequest(existsTemplateRequest);
+		return restTemplate
+				.execute(client -> client.indices().existsTemplate(putIndexTemplateRequest, RequestOptions.DEFAULT));
 	}
+
+	@Override
+	public boolean deleteTemplate(DeleteTemplateRequest deleteTemplateRequest) {
+
+		Assert.notNull(deleteTemplateRequest, "deleteTemplateRequest must not be null");
+
+		DeleteIndexTemplateRequest deleteIndexTemplateRequest = requestFactory
+				.deleteIndexTemplateRequest(deleteTemplateRequest);
+		return restTemplate.execute(
+				client -> client.indices().deleteTemplate(deleteIndexTemplateRequest, RequestOptions.DEFAULT).isAcknowledged());
+	}
+
 	// endregion
 }

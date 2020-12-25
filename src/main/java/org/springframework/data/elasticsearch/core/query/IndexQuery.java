@@ -23,15 +23,20 @@ import org.springframework.lang.Nullable;
  * @author Rizwan Idrees
  * @author Mohsin Husen
  * @author Peter-Josef Meisch
+ * @author Roman Puchkovskiy
+ * @author Subhobrata Dey
  */
-
 public class IndexQuery {
 
 	@Nullable private String id;
 	@Nullable private Object object;
 	@Nullable private Long version;
 	@Nullable private String source;
-	@Nullable private String parentId;
+	@Deprecated @Nullable private String parentId;
+	@Nullable private Long seqNo;
+	@Nullable private Long primaryTerm;
+	@Nullable private String routing;
+	@Nullable private OpType opType;
 
 	@Nullable
 	public String getId() {
@@ -86,5 +91,56 @@ public class IndexQuery {
 	@Deprecated
 	public void setParentId(String parentId) {
 		this.parentId = parentId;
+	}
+
+	@Nullable
+	public Long getSeqNo() {
+		return seqNo;
+	}
+
+	public void setSeqNo(Long seqNo) {
+		this.seqNo = seqNo;
+	}
+
+	@Nullable
+	public Long getPrimaryTerm() {
+		return primaryTerm;
+	}
+
+	public void setPrimaryTerm(Long primaryTerm) {
+		this.primaryTerm = primaryTerm;
+	}
+
+	@Nullable
+	public String getRouting() {
+		return routing;
+	}
+
+	public void setRouting(@Nullable String routing) {
+		this.routing = routing;
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	@Nullable
+	public OpType getOpType() {
+		return opType;
+	}
+
+	/**
+	 * @since 4.2
+	 */
+	public void setOpType(OpType opType) {
+		this.opType = opType;
+	}
+
+	/**
+	 * OpType for the index operation.
+	 * 
+	 * @since 4.2
+	 */
+	public enum OpType {
+		INDEX, CREATE
 	}
 }
